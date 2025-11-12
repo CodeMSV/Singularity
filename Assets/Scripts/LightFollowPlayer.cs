@@ -1,40 +1,74 @@
 using UnityEngine;
 
+/// <summary>
+/// Hace que la luz siga al jugador en el plano XZ, manteniendo su altura Y fija.
+/// Útil para iluminación dinámica centrada en el jugador.
+/// </summary>
 public class LightFollowPlayer : MonoBehaviour
 {
-    public Transform playerTarget;
-    // Guardaremos la altura (Y) de la luz para que no cambie
-    private float lightHeight; 
+    #region Constants
+    private const string PLAYER_TAG = "Player";
+    #endregion
 
-    void Start()
+    #region Serialized Fields
+    [SerializeField, Tooltip("Transform del jugador a seguir")]
+    private Transform playerTarget;
+    #endregion
+
+    #region Private Fields
+    private float lightHeight;
+    #endregion
+
+    #region Unity Lifecycle
+    private void Start()
     {
-        // Encontrar al jugador si no lo hemos asignado
-        if (playerTarget == null)
-        {
-            GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
-            if (playerObject != null)
-            {
-                playerTarget = playerObject.transform;
-            }
-        }
+        FindPlayerIfNeeded();
+        CacheLightHeight();
+    }
+
+    private void LateUpdate()
+    {
+        FollowPlayer();
+    }
+    #endregion
+
+    #region Initialization
+    private void FindPlayerIfNeeded()
+    {
+        if (playerTarget != null) return;
+
+        GameObject playerObject = GameObject.FindGameObjectWithTag(PLAYER_TAG);
         
-        // Guardamos la altura inicial de la luz
+        if (playerObject != null)
+        {
+            playerTarget = playerObject.transform;
+        }
+        else
+        {
+            Debug.LogWarning($"LightFollowPlayer: Player not found on {gameObject.name}", this);
+        }
+    }
+
+    private void CacheLightHeight()
+    {
         lightHeight = transform.position.y;
     }
+    #endregion
 
-    // Usamos LateUpdate para mover la luz DESPUÉS de que el jugador se mueva
-    void LateUpdate()
+    #region Following Logic
+    private void FollowPlayer()
     {
-        if (playerTarget != null)
-        {
-            // 1. Tomamos la posición X y Z del jugador (el centro del plano)
-            Vector3 targetPosition = playerTarget.position;
-            
-            // 2. Le forzamos a usar la altura Y original de la luz
-            targetPosition.y = lightHeight;
-            
-            // 3. Aplicamos la posición
-            transform.position = targetPosition;
-        }
+        if (playerTarget == null) return;
+
+        Vector3 newPosition = CalculateTargetPosition();
+        transform.position = newPosition;
     }
+
+    private Vector3 CalculateTargetPosition()
+    {
+        Vector3 targetPosition = playerTarget.position;
+        targetPosition.y = lightHeight;
+        return targetPosition;
+    }
+    #endregion
 }
