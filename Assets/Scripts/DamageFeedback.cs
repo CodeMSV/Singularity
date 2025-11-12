@@ -1,101 +1,129 @@
 using UnityEngine;
 using System.Collections;
 
+/// <summary>
+/// Gestiona feedback visual (flash) y sonoro cuando el jugador recibe daño.
+/// </summary>
 public class DamageFeedback : MonoBehaviour
 {
+    #region Constants
+    private const string EMISSION_COLOR_PROPERTY = "_EmissionColor";
+    private const float DEFAULT_SFX_VOLUME = 0.5f;
+    private const float EMISSION_INTENSITY = 10f;
+    private const float SPATIAL_BLEND_2D = 0f;
+    #endregion
+
+    #region Private Fields
     private MeshRenderer meshRenderer;
     private Material playerMaterial;
-    
-    private const string EmissionColorProperty = "_EmissionColor";
     private Color originalEmissionColor;
-    
-    // Componente de audio
-    private AudioSource audioSource; 
+    private AudioSource audioSource;
+    private Coroutine currentFlashCoroutine;
+    #endregion
 
-    void Awake()
+    #region Unity Lifecycle
+    private void Awake()
     {
-        // --- Lógica de Inicialización de Materiales ---
+        InitializeMaterial();
+        InitializeAudioSource();
+    }
+    #endregion
+
+    #region Initialization
+    private void InitializeMaterial()
+    {
         meshRenderer = GetComponent<MeshRenderer>();
-        if (meshRenderer != null)
+        
+        if (meshRenderer == null)
         {
-            playerMaterial = meshRenderer.material;
-            
-            if (playerMaterial.HasProperty(EmissionColorProperty))
-            {
-                originalEmissionColor = playerMaterial.GetColor(EmissionColorProperty);
-            }
-            else
-            {
-                originalEmissionColor = Color.white; 
-            }
+            Debug.LogWarning($"No MeshRenderer found on {gameObject.name}. Visual feedback disabled.", this);
+            return;
         }
+
+        playerMaterial = meshRenderer.material;
         
-        // --- SOLUCIÓN DE AUDIO - Opción 1: AudioSource en el mismo GameObject ---
-        audioSource = GetComponent<AudioSource>();
-        
-        // --- Opción 2: Si el AudioSource está en un hijo ---
+        originalEmissionColor = playerMaterial.HasProperty(EMISSION_COLOR_PROPERTY)
+            ? playerMaterial.GetColor(EMISSION_COLOR_PROPERTY)
+            : Color.white;
+    }
+
+    private void InitializeAudioSource()
+    {
+        audioSource = GetComponent<AudioSource>() ?? GetComponentInChildren<AudioSource>();
+
         if (audioSource == null)
         {
-            audioSource = GetComponentInChildren<AudioSource>();
-        }
-        
-        // --- Opción 3: Si NO existe, créalo automáticamente ---
-        if (audioSource == null)
-        {
-            Debug.LogWarning("No se encontró AudioSource. Creando uno automáticamente...");
-            audioSource = gameObject.AddComponent<AudioSource>();
-            audioSource.playOnAwake = false;
-            audioSource.spatialBlend = 0f; // 2D sound
-        }
-        
-        if (audioSource == null)
-        {
-            Debug.LogError("FATAL ERROR: No se pudo inicializar el AudioSource.");
+            audioSource = CreateAudioSource();
         }
     }
 
+    private AudioSource CreateAudioSource()
+    {
+        AudioSource newSource = gameObject.AddComponent<AudioSource>();
+        newSource.playOnAwake = false;
+        newSource.spatialBlend = SPATIAL_BLEND_2D;
+        
+        Debug.LogWarning($"AudioSource created automatically on {gameObject.name}", this);
+        
+        return newSource;
+    }
+    #endregion
+
+    #region Public Methods - Visual Feedback
     public void Flash(float duration)
     {
-        StopAllCoroutines(); 
-        StartCoroutine(FlashRoutine(duration));
+        if (playerMaterial == null) return;
+
+        if (currentFlashCoroutine != null)
+        {
+            StopCoroutine(currentFlashCoroutine);
+        }
+
+        currentFlashCoroutine = StartCoroutine(FlashRoutine(duration));
     }
+    #endregion
 
-    IEnumerator FlashRoutine(float duration)
-    {
-        if (playerMaterial == null) yield break;
-
-        playerMaterial.SetColor(EmissionColorProperty, Color.white * 10f); 
-
-        yield return new WaitForSeconds(duration);
-
-        playerMaterial.SetColor(EmissionColorProperty, originalEmissionColor);
-    }
-    
-    // Reproducir sonido
-    // EN: DamageFeedback.cs
-
-    // Esta es la que usan el Disparo y el Dash (con volumen fijo de 0.5)
+    #region Public Methods - Audio Feedback
     public void PlaySFX(AudioClip clip)
     {
-        PlaySFX(clip, 0.5f); // Llama a la otra función con 0.5f
+        PlaySFX(clip, DEFAULT_SFX_VOLUME);
     }
 
-    // ¡NUEVA FUNCIÓN! Esta la usará el enemigo (acepta volumen variable)
-    public void PlaySFX(AudioClip clip, float customVolume)
+    public void PlaySFX(AudioClip clip, float volume)
     {
-        if (audioSource != null && clip != null)
-        {
-            // (Tu código de diagnóstico sigue aquí...)
-            Debug.Log($"Clip: {clip.name}");
-            Debug.Log($"AudioSource Volume: {audioSource.volume}");
-            
-            // ¡CLAVE! Usamos el volumen personalizado
-            audioSource.PlayOneShot(clip, customVolume); 
-        }
-        else
-        {
-            if (audioSource == null) Debug.LogError("AudioSource es NULL");
-            if (clip == null) Debug.LogError("AudioClip es NULL");
-        }
+        if (!ValidateAudioPlayback(clip)) return;
+
+        audioSource.PlayOneShot(clip, volume);
     }
-} 
+    #endregion
+
+    #region Private Methods
+    private IEnumerator FlashRoutine(float duration)
+    {
+        playerMaterial.SetColor(EMISSION_COLOR_PROPERTY, Color.white * EMISSION_INTENSITY);
+        
+        yield return new WaitForSeconds(duration);
+        
+        playerMaterial.SetColor(EMISSION_COLOR_PROPERTY, originalEmissionColor);
+        
+        currentFlashCoroutine = null;
+    }
+
+    private bool ValidateAudioPlayback(AudioClip clip)
+    {
+        if (audioSource == null)
+        {
+            Debug.LogError($"AudioSource is null on {gameObject.name}", this);
+            return false;
+        }
+
+        if (clip == null)
+        {
+            Debug.LogError($"AudioClip is null when trying to play on {gameObject.name}", this);
+            return false;
+        }
+
+        return true;
+    }
+    #endregion
+}
