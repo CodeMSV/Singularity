@@ -2,86 +2,81 @@ using UnityEngine;
 
 public class PlayerShooting : MonoBehaviour
 {
-    // 1. Arrastra tu "Bullet_Player" (prefab) aquí
-    public GameObject bulletPrefab;
-    public float bulletSpeed = 20f; // Velocidad del proyectil
-    public float fireRate = 0.5f;   // Cadencia de tiro (0.5 segundos entre disparos)
+    [Header("Bullet Settings")]
+    [SerializeField] private GameObject bulletPrefab;
+    [SerializeField] private float bulletSpeed = 20f;
+    [SerializeField] private float fireRate = 0.5f;
+    [SerializeField] private Transform firePoint;
 
     [Header("Audio")]
-    public AudioClip shootSFX; // Archivo de sonido del disparo
+    [SerializeField] private AudioClip shootSFX;
 
-    private float nextFireTime; // Para controlar la cadencia
-    private DamageFeedback damageFeedback; // Conexión para reproducir el audio
+    private float nextFireTime;
+    private DamageFeedback damageFeedback;
+    private Camera mainCamera;
 
-    // La posición de donde saldrán los disparos (ej. el centro del jugador)
-    public Transform firePoint;
-
-    void Start()
+    private void Awake()
     {
+        mainCamera = Camera.main;
+        damageFeedback = GetComponent<DamageFeedback>();
+        
         if (firePoint == null)
         {
-            firePoint = this.transform;
+            firePoint = transform;
         }
-
-        // ¡CLAVE! Obtenemos el script DamageFeedback para usar el altavoz
-        damageFeedback = GetComponent<DamageFeedback>();
     }
 
-    void Update()
+    private void Update()
     {
-        // 2. Detectar el clic del ratón y la cadencia
         if (Input.GetMouseButtonDown(0) && Time.time >= nextFireTime)
         {
             nextFireTime = Time.time + fireRate;
-
             Shoot();
-
-            // Reproducir SFX del disparo
-            if (damageFeedback != null && shootSFX != null)
-            {
-                damageFeedback.PlaySFX(shootSFX);
-            }
+            PlayShootSound();
         }
-
-        // (He quitado el código de TEST que tenías aquí)
     }
 
-    void Shoot()
+    private void Shoot()
     {
         if (bulletPrefab == null)
         {
-            Debug.LogWarning("¡Falta el prefab de la bala en el script PlayerShooting!");
+            Debug.LogWarning("Bullet prefab is missing in PlayerShooting script!");
             return;
         }
 
         GameObject bullet = Instantiate(bulletPrefab, firePoint.position, firePoint.rotation);
+        Vector3 direction = GetShootDirection();
 
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        RaycastHit hit;
+        Rigidbody bulletRb = bullet.GetComponent<Rigidbody>();
+        if (bulletRb != null)
+        {
+            bulletRb.linearVelocity = direction * bulletSpeed;
+        }
+    }
+
+    private Vector3 GetShootDirection()
+    {
+        Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
         Vector3 targetPoint;
 
-        // Esta lógica de Raycast sigue siendo correcta para OBTENER LA DIRECCIÓN
-        if (Physics.Raycast(ray, out hit))
+        if (Physics.Raycast(ray, out RaycastHit hit))
         {
             targetPoint = hit.point;
         }
         else
         {
-            targetPoint = ray.GetPoint(100);
+            targetPoint = ray.GetPoint(100f);
             targetPoint.y = firePoint.position.y;
         }
 
-        Vector3 direction = (targetPoint - firePoint.position).normalized;
+        return (targetPoint - firePoint.position).normalized;
+    }
 
-        Rigidbody bulletRb = bullet.GetComponent<Rigidbody>();
-        if (bulletRb != null)
+    private void PlayShootSound()
+    {
+        if (damageFeedback != null && shootSFX != null)
         {
-            // ¡CORRECCIÓN DE FÍSICA! Usamos .velocity
-            // CORRECTO:
-            bulletRb.linearVelocity = direction * bulletSpeed;
+            damageFeedback.PlaySFX(shootSFX);
         }
-
-        // ¡CORRECCIÓN! HEMOS QUITADO EL TEMPORIZADOR
-        // Destroy(bullet, 5f); 
     }
 }
