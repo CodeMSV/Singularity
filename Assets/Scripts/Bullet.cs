@@ -1,33 +1,48 @@
 using UnityEngine;
 
+/// <summary>
+/// Controla el comportamiento de los proyectiles disparados por el jugador.
+/// Gestiona daño a enemigos y autodestrucción.
+/// </summary>
 public class Bullet : MonoBehaviour
 {
-    public float damage = 1f; // El daño que hace esta bala
+    #region Serialized Fields
+    [SerializeField, Min(0f)] 
+    private float damage = 1f;
+    #endregion
 
-    // Esta función se llama AUTOMÁTICAMENTE cuando "Is Trigger" está marcado
-    // y atravesamos otro collider.
+    #region Unity Callbacks
     private void OnTriggerEnter(Collider other)
     {
-        // 1. Comprobar si el objeto que hemos atravesado tiene un script "Enemy"
-        Enemy enemy = other.gameObject.GetComponent<Enemy>();
-
-        // 2. Si SÍ es un enemigo...
-        if (enemy != null)
+        if (TryDamageEnemy(other))
         {
-            // 3. ...le decimos que reciba daño
-            enemy.TakeDamage(damage);
-
-            // 4. Y destruimos la bala
-            Destroy(gameObject);
+            DestroyBullet();
         }
     }
 
-    // --- ¡NUEVA FUNCIÓN! ---
-    // Esta función se llama automáticamente cuando el Mesh Renderer
-    // de la bala deja de ser visible por CUALQUIER cámara.
     private void OnBecameInvisible()
     {
-        // Destruir la bala (evita que se acumulen infinitamente)
-        Destroy(gameObject); 
+        DestroyBullet();
     }
+    #endregion
+
+    #region Private Methods
+    private bool TryDamageEnemy(Collider collider)
+    {
+        Enemy enemy = collider.GetComponent<Enemy>();
+        
+        if (enemy != null)
+        {
+            enemy.TakeDamage(damage);
+            return true;
+        }
+        
+        return false;
+    }
+
+    private void DestroyBullet()
+    {
+        Destroy(gameObject);
+    }
+    #endregion
 }
