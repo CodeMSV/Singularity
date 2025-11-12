@@ -1,84 +1,155 @@
 using UnityEngine;
 using System.Collections;
 
+/// <summary>
+/// Desvanece progresivamente el objeto (base + emisión) y luego lo destruye.
+/// Útil para efectos de partículas o mini-cubos de explosión.
+/// </summary>
 public class FadeAndDie : MonoBehaviour
 {
-    [Header("Tiempos")]
-    public float initialDelay = 0.5f; // Retraso antes de que empiece nada
-    public float fadeCubeDuration = 1.0f; // Tiempo para que el cubo se vuelva invisible
-    public float fadeGlowDuration = 1.0f; // Tiempo para que el brillo se apague (DESPUÉS)
+    #region Constants
+    private const string EMISSION_COLOR_PROPERTY = "_EmissionColor";
+    private const string EMISSION_KEYWORD = "_EMISSION";
+    private const float FULLY_TRANSPARENT = 0f;
+    #endregion
 
+    #region Serialized Fields
+    [Header("Timing")]
+    [SerializeField, Min(0f), Tooltip("Retraso antes de iniciar el fade")]
+    private float initialDelay = 0.5f;
+    
+    [SerializeField, Min(0f), Tooltip("Duración del fade del color base")]
+    private float fadeCubeDuration = 1f;
+    
+    [SerializeField, Min(0f), Tooltip("Duración del fade de la emisión")]
+    private float fadeGlowDuration = 1f;
+    #endregion
+
+    #region Private Fields
     private Material fadeMaterial;
     private Color startBaseColor;
     private Color startEmissionColor;
+    #endregion
 
-    void Awake()
+    #region Unity Lifecycle
+    private void Awake()
+    {
+        if (!InitializeMaterial())
+        {
+            enabled = false;
+        }
+    }
+
+    private void Start()
+    {
+        StartCoroutine(FadeOutSequence());
+    }
+    #endregion
+
+    #region Initialization
+    private bool InitializeMaterial()
     {
         MeshRenderer meshRenderer = GetComponent<MeshRenderer>();
-        if (meshRenderer == null) { enabled = false; return; }
         
-        // Creamos una instancia única del material
-        fadeMaterial = meshRenderer.material; 
+        if (meshRenderer == null)
+        {
+            Debug.LogWarning($"FadeAndDie: No MeshRenderer on {gameObject.name}", this);
+            return false;
+        }
 
-        // Guardamos los colores iniciales
-        startBaseColor = fadeMaterial.color; 
-        if (fadeMaterial.IsKeywordEnabled("_EMISSION"))
-        {
-            startEmissionColor = fadeMaterial.GetColor("_EmissionColor");
-        }
-        else
-        {
-            startEmissionColor = Color.black;
-        }
+        fadeMaterial = meshRenderer.material;
+        CacheInitialColors();
+        
+        return true;
     }
 
-    void Start()
+    private void CacheInitialColors()
     {
-        StartCoroutine(FadeOutAndDestroy());
+        startBaseColor = fadeMaterial.color;
+        startEmissionColor = GetInitialEmissionColor();
     }
 
-    IEnumerator FadeOutAndDestroy()
+    private Color GetInitialEmissionColor()
     {
-        // 1. Espera inicial
+        if (fadeMaterial.IsKeywordEnabled(EMISSION_KEYWORD))
+        {
+            return fadeMaterial.GetColor(EMISSION_COLOR_PROPERTY);
+        }
+        
+        return Color.black;
+    }
+    #endregion
+
+    #region Fade Sequence
+    private IEnumerator FadeOutSequence()
+    {
         yield return new WaitForSeconds(initialDelay);
-
-        // --- ETAPA 1: Desvanecer el Cubo (el Color Base) ---
-        float timer = 0f;
-        while (timer < fadeCubeDuration)
-        {
-            timer += Time.deltaTime;
-            float progress = timer / fadeCubeDuration; // 0 a 1
-
-            // Hacemos que la transparencia (alpha) del color base baje a 0
-            Color currentBaseColor = startBaseColor;
-            currentBaseColor.a = Mathf.Lerp(startBaseColor.a, 0f, progress);
-            fadeMaterial.color = currentBaseColor;
-            
-            yield return null; // Espera un frame
-        }
-
-        // Asegurarse de que el color base está 100% transparente
-        Color finalBaseColor = startBaseColor;
-        finalBaseColor.a = 0f;
-        fadeMaterial.color = finalBaseColor;
-
-        // --- ETAPA 2: Desvanecer el Brillo (la Emisión) ---
-        timer = 0f; // Reiniciamos el temporizador
-        while (timer < fadeGlowDuration)
-        {
-            timer += Time.deltaTime;
-            float progress = timer / fadeGlowDuration; // 0 a 1
-
-            // Hacemos que el color de emisión se vuelva negro (se apague)
-            Color currentEmissionColor = Color.Lerp(startEmissionColor, Color.black, progress);
-            fadeMaterial.SetColor("_EmissionColor", currentEmissionColor);
-
-            yield return null; // Espera un frame
-        }
-
-        // Asegurarse de que el brillo está 100% apagado
-        fadeMaterial.SetColor("_EmissionColor", Color.black);
-
-        Destroy(gameObject); // Destruir el mini-cubo
+        
+        yield return StartCoroutine(FadeBaseColor());
+        yield return StartCoroutine(FadeEmission());
+        
+        Destroy(gameObject);
     }
+
+    private IEnumerator FadeBaseColor()
+    {
+        float elapsed = 0f;
+
+        while (elapsed < fadeCubeDuration)
+        {
+            elapsed += Time.deltaTime;
+            float progress = elapsed / fadeCubeDuration;
+            
+            UpdateBaseColorAlpha(progress);
+            
+            yield return null;
+        }
+
+        SetBaseColorFullyTransparent();
+    }
+
+    private IEnumerator FadeEmission()
+    {
+        float elapsed = 0f;
+
+        while (elapsed < fadeGlowDuration)
+        {
+            elapsed += Time.deltaTime;
+            float progress = elapsed / fadeGlowDuration;
+            
+            UpdateEmissionColor(progress);
+            
+            yield return null;
+        }
+
+        SetEmissionFullyOff();
+    }
+    #endregion
+
+    #region Color Updates
+    private void UpdateBaseColorAlpha(float progress)
+    {
+        Color currentColor = startBaseColor;
+        currentColor.a = Mathf.Lerp(startBaseColor.a, FULLY_TRANSPARENT, progress);
+        fadeMaterial.color = currentColor;
+    }
+
+    private void SetBaseColorFullyTransparent()
+    {
+        Color finalColor = startBaseColor;
+        finalColor.a = FULLY_TRANSPARENT;
+        fadeMaterial.color = finalColor;
+    }
+
+    private void UpdateEmissionColor(float progress)
+    {
+        Color currentEmission = Color.Lerp(startEmissionColor, Color.black, progress);
+        fadeMaterial.SetColor(EMISSION_COLOR_PROPERTY, currentEmission);
+    }
+
+    private void SetEmissionFullyOff()
+    {
+        fadeMaterial.SetColor(EMISSION_COLOR_PROPERTY, Color.black);
+    }
+    #endregion
 }
