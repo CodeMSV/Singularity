@@ -4,252 +4,382 @@ using TMPro;
 using System.Collections;
 using UnityEngine.UI;
 
+/// <summary>
+/// Gestiona el estado global del juego: kills, poder Nova, pausa y game over.
+/// </summary>
 public class GameManager : MonoBehaviour
 {
-    public static GameManager Instance;
-    private int killCount = 0;
-    private bool isGameOver = false;
+    #region Singleton
+    public static GameManager Instance { get; private set; }
+    #endregion
 
-    private Transform playerTransform; // Para saber dónde crear la onda
+    #region Constants
+    private const float GAME_OVER_MUSIC_VOLUME = 0.1f;
+    private const float GAME_OVER_DELAY = 0.05f;
+    private const float PAUSED_TIME_SCALE = 0f;
+    private const float NORMAL_TIME_SCALE = 1f;
+    private const string PLAYER_TAG = "Player";
+    #endregion
 
-    [Header("Poder Nova")]
-    public Image novaFillImage;
-    public int novaKillsThreshold = 30;
-    private int currentNovaKills = 0;
-    private bool isNovaReady = false;
+    #region Serialized Fields
+    [Header("Nova Power")]
+    [SerializeField] private Image novaFillImage;
+    [SerializeField, Min(1)] private int novaKillsThreshold = 30;
+    [SerializeField, Min(0f)] private float novaRadius = 15f;
+    [SerializeField, Min(0f)] private float novaDamage = 9999f;
+    [SerializeField, Range(0f, 3f)] private float novaUnleashVolume = 1.5f;
+    [SerializeField] private GameObject novaEffectPrefab;
+    [SerializeField] private AudioClip novaReadySFX;
+    [SerializeField] private AudioClip novaUnleashSFX;
 
-    [Range(0f, 3f)]
-    public float novaUnleashVolume = 1.5f;
+    [Header("HUD")]
+    [SerializeField] private TextMeshProUGUI hudKillsText;
 
-    public float novaRadius = 15f;
-    public float novaDamage = 9999f;
-    public GameObject novaEffectPrefab;
-    public AudioClip novaReadySFX;
-    public AudioClip novaUnleashSFX;
+    [Header("UI Panels")]
+    [SerializeField] private GameObject pausePanel;
+    [SerializeField] private GameObject gameOverPanel;
 
-    [Header("Referencias de HUD")]
-    public TextMeshProUGUI hudKillsText;
+    [Header("Game Over UI")]
+    [SerializeField] private TextMeshProUGUI killCountText;
+    [SerializeField] private AudioSource musicSource;
 
-    [Header("Referencias de UI")]
-    public GameObject pausePanel;
-    private bool isPaused = false;
+    [Header("Debug Panels (Optional)")]
+    [SerializeField] private GameObject panelDePruebaRojo;
+    [SerializeField] private GameObject panelDePruebaVerde;
+    #endregion
 
-    [Header("Referencias de UI (OPCIONALES)")]
-    public GameObject gameOverPanel;
-    public TextMeshProUGUI killCountText;
-    public AudioSource musicSource;
-    public GameObject panelDePruebaRojo;
-    public GameObject panelDePruebaVerde;
+    #region Private Fields
+    private Transform playerTransform;
+    private int killCount;
+    private int currentNovaKills;
+    private bool isGameOver;
+    private bool isPaused;
+    private bool isNovaReady;
+    #endregion
 
-    void Awake()
+    #region Unity Lifecycle
+    private void Awake()
     {
-        Debug.Log("GameManager: ¡Awake() ejecutado!");
+        if (!InitializeSingleton()) return;
+        
+        InitializePlayer();
+        InitializeUI();
+        ResetTimeScale();
+    }
+
+    private void Update()
+    {
+        HandlePauseInput();
+        HandleNovaInput();
+    }
+    #endregion
+
+    #region Initialization
+    private bool InitializeSingleton()
+    {
         if (Instance == null)
         {
             Instance = this;
-            Debug.Log("GameManager: Instancia creada.");
-        }
-        else
-        {
-            Destroy(gameObject);
-            return;
+            return true;
         }
 
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
+        Destroy(gameObject);
+        return false;
+    }
+
+    private void InitializePlayer()
+    {
+        GameObject player = GameObject.FindGameObjectWithTag(PLAYER_TAG);
+        
         if (player != null)
         {
             playerTransform = player.transform;
         }
-
-        // Ocultar paneles al inicio
-        if (gameOverPanel != null) { gameOverPanel.SetActive(false); }
-        if (panelDePruebaRojo != null) { panelDePruebaRojo.SetActive(false); }
-        if (panelDePruebaVerde != null) { panelDePruebaVerde.SetActive(false); } // <-- AÑADIDO (para que no falle)
-        if (pausePanel != null) { pausePanel.SetActive(false); } // <-- AÑADIDO (para que no falle)
-
-
-        Time.timeScale = 1f;
+        else
+        {
+            Debug.LogError("GameManager: Player not found. Ensure player has 'Player' tag.", this);
+        }
     }
 
-    // AHORA ACEPTA EL MARCADOR "fromNova"
-    public void AddKill(bool fromNova = false) // <-- MODIFICADO
+    private void InitializeUI()
     {
-        if (isGameOver) return;
-        killCount++;
-
-        if (hudKillsText != null)
-        {
-            hudKillsText.text = "KILLS: " + killCount;
-        }
-
-        // --- LÓGICA DE NOVA MODIFICADA ---
-        // Solo suma a la barra de Nova si NO está cargada Y la muerte NO vino de una Nova
-        if (!isNovaReady && !fromNova) // <-- MODIFICADO
-        {
-            currentNovaKills++;
-
-            // Actualiza la barra de Nova
-            float fillAmount = (float)currentNovaKills / (float)novaKillsThreshold;
-            if (novaFillImage != null)
-            {
-                novaFillImage.fillAmount = fillAmount;
-            }
-
-            // ¿Se acaba de cargar?
-            if (currentNovaKills >= novaKillsThreshold)
-            {
-                isNovaReady = true;
-                // Reproduce sonido de "Lista"
-                DamageFeedback feedback = FindFirstObjectByType<DamageFeedback>(); // <-- MODIFICADO (FindObjectOfType obsoleto)
-                if (feedback != null && novaReadySFX != null)
-                {
-                    feedback.PlaySFX(novaReadySFX);
-                }
-            }
-        }
+        HidePanel(gameOverPanel);
+        HidePanel(pausePanel);
+        HidePanel(panelDePruebaRojo);
+        HidePanel(panelDePruebaVerde);
     }
 
-    public void TriggerGameOver()
+    private void HidePanel(GameObject panel)
     {
-        if (isGameOver) return;
-
-        isGameOver = true;
-        Debug.Log("--- ¡GAME OVER TRIGGERED! ---");
-        StartCoroutine(GameOverRoutine());
+        if (panel != null)
+        {
+            panel.SetActive(false);
+        }
     }
 
-    IEnumerator GameOverRoutine()
+    private void ResetTimeScale()
     {
-        Debug.Log("Game Over Routine: Empezando...");
-
-        if (musicSource != null)
-        {
-            musicSource.volume = 0.1f;
-            Debug.Log("Game Over Routine: Música bajada.");
-        }
-        else { Debug.LogWarning("Game Over Routine: musicSource es NULL."); }
-
-        if (killCountText != null)
-        {
-            killCountText.text = "ENEMIGOS ELIMINADOS: " + killCount;
-            Debug.Log("Game Over Routine: Texto de kills actualizado.");
-        }
-        else { Debug.LogWarning("Game Over Routine: killCountText es NULL."); }
-
-        if (gameOverPanel != null)
-        {
-            gameOverPanel.SetActive(true);
-            Debug.Log("Game Over Routine: gameOverPanel ACTIVADO.");
-        }
-        else { Debug.LogWarning("Game Over Routine: gameOverPanel es NULL."); }
-
-        if (panelDePruebaRojo != null)
-        {
-            panelDePruebaRojo.SetActive(true);
-            Debug.Log("Game Over Routine: panelDePruebaRojo ACTIVADO.");
-        }
-        if (panelDePruebaVerde != null)
-        {
-            panelDePruebaVerde.SetActive(true);
-            Debug.Log("Game Over Routine: panelDePruebaVerde ACTIVADO.");
-        }
-
-        yield return new WaitForSecondsRealtime(0.05f);
-
-        Time.timeScale = 0f;
-        Debug.Log("Game Over Routine: Tiempo CONGELADO. Fin.");
+        Time.timeScale = NORMAL_TIME_SCALE;
     }
+    #endregion
 
-    public void ReloadScene()
-    {
-        Time.timeScale = 1f;
-
-        if (EnemySpawner.Instance != null)
-        {
-            EnemySpawner.Instance.ResetSpawner();
-        }
-
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-    }
-
-    void Update()
+    #region Input Handling
+    private void HandlePauseInput()
     {
         if (!isGameOver && Input.GetKeyDown(KeyCode.Escape))
         {
             TogglePause();
         }
+    }
 
-        if (isNovaReady && Input.GetMouseButtonDown(1)) // 1 = Clic Derecho
+    private void HandleNovaInput()
+    {
+        if (isNovaReady && Input.GetMouseButtonDown(1))
         {
             UnleashNova();
         }
     }
+    #endregion
 
-    public void TogglePause()
+    #region Kill Tracking
+    public void AddKill(bool fromNova = false)
     {
-        isPaused = !isPaused;
+        if (isGameOver) return;
 
-        if (pausePanel != null)
+        killCount++;
+        UpdateKillsHUD();
+
+        if (ShouldChargeNova(fromNova))
         {
-            pausePanel.SetActive(isPaused);
-        }
-
-        Time.timeScale = isPaused ? 0f : 1f;
-
-        // --- ¡AÑADE ESTE BLOQUE! ---
-        // Le decimos a la música que hacer
-        if (musicSource != null)
-        {
-            if (isPaused)
-            {
-                // Pausa la música
-                musicSource.Pause();
-            }
-            else
-            {
-                // Reanuda la música
-                musicSource.UnPause();
-            }
+            ChargeNova();
         }
     }
 
-    void UnleashNova()
+    private bool ShouldChargeNova(bool fromNova)
+    {
+        return !isNovaReady && !fromNova;
+    }
+
+    private void ChargeNova()
+    {
+        currentNovaKills++;
+        UpdateNovaFillBar();
+
+        if (currentNovaKills >= novaKillsThreshold)
+        {
+            ActivateNova();
+        }
+    }
+
+    private void UpdateKillsHUD()
+    {
+        if (hudKillsText != null)
+        {
+            hudKillsText.text = $"KILLS: {killCount}";
+        }
+    }
+
+    private void UpdateNovaFillBar()
+    {
+        if (novaFillImage != null)
+        {
+            float fillAmount = (float)currentNovaKills / novaKillsThreshold;
+            novaFillImage.fillAmount = fillAmount;
+        }
+    }
+
+    private void ActivateNova()
+    {
+        isNovaReady = true;
+        PlayNovaReadySound();
+    }
+
+    private void PlayNovaReadySound()
+    {
+        DamageFeedback feedback = FindFirstObjectByType<DamageFeedback>();
+        
+        if (feedback != null && novaReadySFX != null)
+        {
+            feedback.PlaySFX(novaReadySFX);
+        }
+    }
+    #endregion
+
+    #region Nova Power
+    private void UnleashNova()
+    {
+        ResetNovaCharge();
+        PlayNovaEffects();
+        DamageEnemiesInRadius();
+    }
+
+    private void ResetNovaCharge()
     {
         isNovaReady = false;
         currentNovaKills = 0;
 
-        // Resetea la UI
         if (novaFillImage != null)
         {
             novaFillImage.fillAmount = 0f;
         }
+    }
 
-        // Efectos visuales y de sonido
+    private void PlayNovaEffects()
+    {
+        SpawnNovaVisualEffect();
+        PlayNovaSound();
+    }
+
+    private void SpawnNovaVisualEffect()
+    {
         if (novaEffectPrefab != null && playerTransform != null)
         {
             Instantiate(novaEffectPrefab, playerTransform.position, Quaternion.identity);
         }
+    }
 
-        DamageFeedback feedback = FindFirstObjectByType<DamageFeedback>(); // <-- MODIFICADO (FindObjectOfType obsoleto)
+    private void PlayNovaSound()
+    {
+        DamageFeedback feedback = FindFirstObjectByType<DamageFeedback>();
+        
         if (feedback != null && novaUnleashSFX != null)
         {
-            // Le pasamos el volumen (asegúrate de que DamageFeedback tiene la función con 2 parámetros)
             feedback.PlaySFX(novaUnleashSFX, novaUnleashVolume);
         }
+    }
 
-        // --- ¡LA LÓGICA DE MATAR! ---
+    private void DamageEnemiesInRadius()
+    {
         if (playerTransform == null) return;
 
         Collider[] hits = Physics.OverlapSphere(playerTransform.position, novaRadius);
 
         foreach (Collider hit in hits)
         {
-            Enemy enemy = hit.GetComponent<Enemy>();
-            if (enemy != null)
-            {
-                // ¡AQUÍ MARCAMOS LA MUERTE COMO "TRUE" PARA LA NOVA!
-                enemy.TakeDamage(novaDamage, true); // <-- MODIFICADO
-            }
+            TryDamageEnemy(hit);
         }
     }
+
+    private void TryDamageEnemy(Collider collider)
+    {
+        Enemy enemy = collider.GetComponent<Enemy>();
+        
+        if (enemy != null)
+        {
+            enemy.TakeDamage(novaDamage, isNovaKill: true);
+        }
+    }
+    #endregion
+
+    #region Game Over
+    public void TriggerGameOver()
+    {
+        if (isGameOver) return;
+
+        isGameOver = true;
+        StartCoroutine(GameOverSequence());
+    }
+
+    private IEnumerator GameOverSequence()
+    {
+        LowerMusicVolume();
+        ShowGameOverUI();
+        
+        yield return new WaitForSecondsRealtime(GAME_OVER_DELAY);
+        
+        FreezeGame();
+    }
+
+    private void LowerMusicVolume()
+    {
+        if (musicSource != null)
+        {
+            musicSource.volume = GAME_OVER_MUSIC_VOLUME;
+        }
+    }
+
+    private void ShowGameOverUI()
+    {
+        UpdateFinalKillCount();
+        ShowPanel(gameOverPanel);
+        ShowPanel(panelDePruebaRojo);
+        ShowPanel(panelDePruebaVerde);
+    }
+
+    private void UpdateFinalKillCount()
+    {
+        if (killCountText != null)
+        {
+            killCountText.text = $"ENEMIGOS ELIMINADOS: {killCount}";
+        }
+    }
+
+    private void ShowPanel(GameObject panel)
+    {
+        if (panel != null)
+        {
+            panel.SetActive(true);
+        }
+    }
+
+    private void FreezeGame()
+    {
+        Time.timeScale = PAUSED_TIME_SCALE;
+    }
+    #endregion
+
+    #region Pause
+    public void TogglePause()
+    {
+        isPaused = !isPaused;
+
+        UpdatePauseUI();
+        UpdateTimeScale();
+        UpdateMusicState();
+    }
+
+    private void UpdatePauseUI()
+    {
+        if (pausePanel != null)
+        {
+            pausePanel.SetActive(isPaused);
+        }
+    }
+
+    private void UpdateTimeScale()
+    {
+        Time.timeScale = isPaused ? PAUSED_TIME_SCALE : NORMAL_TIME_SCALE;
+    }
+
+    private void UpdateMusicState()
+    {
+        if (musicSource == null) return;
+
+        if (isPaused)
+        {
+            musicSource.Pause();
+        }
+        else
+        {
+            musicSource.UnPause();
+        }
+    }
+    #endregion
+
+    #region Scene Management
+    public void ReloadScene()
+    {
+        Time.timeScale = NORMAL_TIME_SCALE;
+        ResetEnemySpawner();
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+
+    private void ResetEnemySpawner()
+    {
+        if (EnemySpawner.Instance != null)
+        {
+            EnemySpawner.Instance.ResetSpawner();
+        }
+    }
+    #endregion
 }
