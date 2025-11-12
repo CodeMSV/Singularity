@@ -1,48 +1,57 @@
 using UnityEngine;
 
+/// <summary>
+/// Proyectil disparado por enemigos. Mata al jugador al contacto y se autodestruye
+/// después de un tiempo para evitar acumulación.
+/// </summary>
 public class EnemyBullet : MonoBehaviour
 {
-    // Esta bala mata de un toque, así que no necesitamos una variable de daño.
+    #region Constants
+    private const float AUTO_DESTROY_TIME = 8f;
+    #endregion
 
+    #region Unity Lifecycle
     private void Start()
     {
-        // Se destruye sola después de un tiempo (para no saturar)
-        Destroy(gameObject, 8f);
+        Destroy(gameObject, AUTO_DESTROY_TIME);
     }
 
-    // Se llama cuando la bala atraviesa un collider
     private void OnTriggerEnter(Collider other)
     {
-        if (other.gameObject.CompareTag("Player"))
+        if (IsPlayer(other))
         {
-            if (other.gameObject.CompareTag("Player"))
-            {
-                // --- AÑADE ESTAS LÍNEAS DE TEST ---
-                Debug.Log("¡CHOQUE CON JUGADOR DETECTADO!");
-
-                if (GameManager.Instance == null)
-                {
-                    Debug.LogError("¡ERROR! GameManager.Instance es NULL.");
-                }
-                // ------------------------------------
-
-                // --- TU CÓDIGO NUEVO ---
-                if (GameManager.Instance != null)
-                {
-                    GameManager.Instance.TriggerGameOver();
-                }
-
-                Destroy(gameObject); // Destruye la bala
-                return;
-            }
-
-
-            // Si choca con cualquier cosa que NO sea el Jugador o Enemigos (Muros/Suelo)
-            // (Esto es por si añadimos muros después)
-            if (!other.gameObject.CompareTag("Enemy") && !other.gameObject.CompareTag("PlayerBullet"))
-            {
-                Destroy(gameObject);
-            }
+            HandlePlayerCollision();
         }
     }
+    #endregion
+
+    #region Collision Handling
+    private bool IsPlayer(Collider collider)
+    {
+        return collider.CompareTag("Player");
+    }
+
+    private void HandlePlayerCollision()
+    {
+        TriggerGameOver();
+        DestroyBullet();
+    }
+
+    private void TriggerGameOver()
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.TriggerGameOver();
+        }
+        else
+        {
+            Debug.LogError("GameManager.Instance is null. Cannot trigger game over.", this);
+        }
+    }
+
+    private void DestroyBullet()
+    {
+        Destroy(gameObject);
+    }
+    #endregion
 }
