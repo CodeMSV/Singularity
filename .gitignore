@@ -16,6 +16,11 @@ Obj/
 # Builds compilados
 Build/
 Builds/
+SingularityWindows/
+SingularityMac/
+SingularityLinux/
+Singularity_Data/
+*_Data/
 
 # Logs de Unity
 Logs/
@@ -40,6 +45,11 @@ sysinfo.txt
 *.unitypackage
 *.app
 *.exe
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
 
 # Archivos de base de datos internos
 *.pidb
