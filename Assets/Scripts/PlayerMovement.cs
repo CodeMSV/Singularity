@@ -1,213 +1,360 @@
 using UnityEngine;
 using System.Collections;
-using UnityEngine.UI; 
+using UnityEngine.UI;
 
+/// <summary>
+/// Controla el movimiento del jugador, dash con invencibilidad y sistema de recarga por kills.
+/// </summary>
 public class PlayerMovement : MonoBehaviour
 {
+    #region Constants
+    private const float MIN_INPUT_MAGNITUDE = 0.1f;
+    private const float EMPTY_FILL = 0f;
+    private const string DASH_ANIMATION_TRIGGER = "OnFull";
+    private const string ENEMY_TYPE_CUBE = "Cube";
+    private const string ENEMY_TYPE_SPHERE = "Sphere";
+    #endregion
+
+    #region Serialized Fields
+    [Header("Movement")]
+    [SerializeField, Min(0f)] 
     public float moveSpeed = 5f;
-    private Rigidbody rb;
-    private Vector3 movementInput;
 
     [Header("Dash")]
-    public float dashSpeed = 30f;
-    public float dashDuration = 0.15f; 
-    public float dashCooldownTime = 0.5f; 
+    [SerializeField, Min(0f)] 
+    private float dashSpeed = 30f;
+    
+    [SerializeField, Min(0f)] 
+    private float dashDuration = 0.15f;
+    
+    [SerializeField, Min(0f)] 
+    private float dashCooldownTime = 0.5f;
 
-    [Header("HUD y Efectos del Dash")]
-    public Image dashFillImage; 
-    public Animator dashBarAnimator; 
-    public AudioClip dashReadySFX; 
+    [Header("Dash UI & Effects")]
+    [SerializeField] 
+    private Image dashFillImage;
+    
+    [SerializeField] 
+    private Animator dashBarAnimator;
+    
+    [SerializeField] 
+    private AudioClip dashReadySFX;
 
     [Header("Audio")]
-    public AudioClip dashSFX; 
+    [SerializeField] 
+    private AudioClip dashSFX;
 
-    [Header("Recarga por Kills")]
-    public int cubeKillsNeeded = 10;
-    public int sphereKillsNeeded = 2;
-    public int currentDashKills = 0;
+    [Header("Kill Charge System")]
+    [SerializeField, Min(1)] 
+    private int cubeKillsNeeded = 10;
     
-    private bool canDash = true;
-    private bool isDashing = false;
+    [SerializeField, Min(1)] 
+    private int sphereKillsNeeded = 2;
     
-    private Collider playerCollider; 
-    private DamageFeedback damageFeedback; 
+    private int currentDashKills;
+
+    [Header("Particles")]
+    [SerializeField] 
+    private ParticleSystem playerDustParticles;
     
-    public ParticleSystem playerDustParticles; 
+    [SerializeField, Min(0f)] 
+    private float dustEmissionRate = 50f;
+    #endregion
+
+    #region Private Fields
+    private Rigidbody rb;
+    private Collider playerCollider;
+    private DamageFeedback damageFeedback;
     private ParticleSystem.EmissionModule emissionModule;
-    public float dustEmissionRate = 50f;
+    
+    private Vector3 movementInput;
+    private bool canDash = true;
+    private bool isDashing;
+    #endregion
 
-    void Awake()
+    #region Unity Lifecycle
+    private void Awake()
+    {
+        InitializeComponents();
+    }
+
+    private void Start()
+    {
+        InitializeParticles();
+        ResetDashFillBar();
+    }
+
+    private void Update()
+    {
+        HandleMovementInput();
+        HandleDashInput();
+    }
+
+    private void FixedUpdate()
+    {
+        if (!isDashing)
+        {
+            ApplyMovement();
+        }
+        
+        UpdateParticles();
+    }
+    #endregion
+
+    #region Initialization
+    private void InitializeComponents()
     {
         rb = GetComponent<Rigidbody>();
         playerCollider = GetComponent<Collider>();
         damageFeedback = GetComponent<DamageFeedback>();
     }
 
-    void Start()
+    private void InitializeParticles()
     {
-        if (playerDustParticles != null)
-        {
-            emissionModule = playerDustParticles.emission;
-            emissionModule.rateOverTime = 0;
-            playerDustParticles.Play();
-        }
-        
-        // --- AÑADIDO ---
-        // Asegurarse de que la barra empieza vacía al cargar la escena
-        if (dashFillImage != null)
-        {
-            dashFillImage.fillAmount = 0f;
-        }
+        if (playerDustParticles == null) return;
+
+        emissionModule = playerDustParticles.emission;
+        emissionModule.rateOverTime = 0;
+        playerDustParticles.Play();
     }
 
-    void Update()
+    private void ResetDashFillBar()
+    {
+        if (dashFillImage != null)
+        {
+            dashFillImage.fillAmount = EMPTY_FILL;
+        }
+    }
+    #endregion
+
+    #region Input Handling
+    private void HandleMovementInput()
     {
         movementInput.x = Input.GetAxisRaw("Horizontal");
         movementInput.z = Input.GetAxisRaw("Vertical");
         movementInput.Normalize();
+    }
 
+    private void HandleDashInput()
+    {
         if (Input.GetKeyDown(KeyCode.Space) && canDash)
         {
-            // (La comprobación de '>= cubeKillsNeeded' ya la hace 'StartDash' implícitamente)
-            StartDash(); 
+            TryStartDash();
         }
+    }
+    #endregion
+
+    #region Movement
+    private void ApplyMovement()
+    {
+        float verticalVelocity = rb.linearVelocity.y;
+        Vector3 targetVelocity = movementInput * moveSpeed;
+        rb.linearVelocity = new Vector3(targetVelocity.x, verticalVelocity, targetVelocity.z);
+    }
+    #endregion
+
+    #region Dash System
+    private void TryStartDash()
+    {
+        if (!CanPerformDash()) return;
+
+        ExecuteDash();
     }
 
-    void FixedUpdate()
+    private bool CanPerformDash()
     {
-        if (!isDashing)
-        {
-            // --- ¡CORREGIDO! ---
-            // 'linearVelocity' no existe, es 'velocity'
-            float verticalVelocity = rb.linearVelocity.y; 
-            Vector3 targetVelocity = movementInput * moveSpeed;
-            rb.linearVelocity = new Vector3(targetVelocity.x, verticalVelocity, targetVelocity.z);
-        }
-        UpdateParticles();
+        return HasMovementInput() && HasEnoughKills();
     }
-    
-    // --- LÓGICA DEL DASH ---
-    void StartDash()
+
+    private bool HasMovementInput()
     {
-        // Añadida comprobación de recarga aquí
-        if (movementInput.magnitude < 0.1f || currentDashKills < cubeKillsNeeded) return;
-        
+        return movementInput.magnitude >= MIN_INPUT_MAGNITUDE;
+    }
+
+    private bool HasEnoughKills()
+    {
+        return currentDashKills >= cubeKillsNeeded;
+    }
+
+    private void ExecuteDash()
+    {
+        SetDashState();
+        ApplyDashVelocity();
+        ConsumeDashCharge();
+        PlayDashEffects();
+        StartCoroutine(DashSequence());
+    }
+
+    private void SetDashState()
+    {
         canDash = false;
         isDashing = true;
-        
-        // --- ¡CORREGIDO! ---
-        // 'linearVelocity' no existe, es 'velocity'
-        Vector3 dashVelocity = movementInput * dashSpeed;
-        rb.linearVelocity = dashVelocity;
-
-        currentDashKills = 0;
-        
-        // --- ¡¡AQUÍ ESTÁ LA LÍNEA QUE FALTABA!! ---
-        // Resetea la barra visual a 0
-        if (dashFillImage != null)
-        {
-            dashFillImage.fillAmount = 0f;
-        }
-        // ------------------------------------
-
-        if (damageFeedback != null)
-        {
-            damageFeedback.Flash(dashDuration);
-            if (dashSFX != null)
-            {
-                damageFeedback.PlaySFX(dashSFX);
-            }
-        }
-        
-        StartCoroutine(DashInvincibilityRoutine());
     }
 
-    IEnumerator DashInvincibilityRoutine()
+    private void ApplyDashVelocity()
+    {
+        Vector3 dashVelocity = movementInput * dashSpeed;
+        rb.linearVelocity = dashVelocity;
+    }
+
+    private void ConsumeDashCharge()
+    {
+        currentDashKills = 0;
+        ResetDashFillBar();
+    }
+
+    private void PlayDashEffects()
+    {
+        if (damageFeedback == null) return;
+
+        damageFeedback.Flash(dashDuration);
+        
+        if (dashSFX != null)
+        {
+            damageFeedback.PlaySFX(dashSFX);
+        }
+    }
+
+    private IEnumerator DashSequence()
+    {
+        EnableInvincibility();
+        
+        yield return new WaitForSeconds(dashDuration);
+        
+        isDashing = false;
+        DisableInvincibility();
+        
+        yield return new WaitForSeconds(dashCooldownTime);
+    }
+
+    private void EnableInvincibility()
     {
         if (playerCollider != null)
         {
             playerCollider.enabled = false;
         }
-        
-        yield return new WaitForSeconds(dashDuration);
+    }
 
-        isDashing = false;
-        
+    private void DisableInvincibility()
+    {
         if (playerCollider != null)
         {
             playerCollider.enabled = true;
         }
-        
-        yield return new WaitForSeconds(dashCooldownTime);
-        
-        // (La lógica de 'canDash = true' se mueve a 'AddKillCharge'
-        //  para que solo se active al RECARGAR, no al terminar el cooldown)
     }
+    #endregion
 
-    // --- LÓGICA DE KILLS ---
+    #region Kill Charge System
     public void AddKillCharge(string enemyType)
     {
-        bool wasReady = (currentDashKills >= cubeKillsNeeded);
+        bool wasReady = IsDashReady();
 
-        if (enemyType == "Cube")
+        AddKillsForEnemyType(enemyType);
+        ClampKills();
+        UpdateDashUI();
+
+        CheckAndActivateDash(wasReady);
+    }
+
+    private bool IsDashReady()
+    {
+        return currentDashKills >= cubeKillsNeeded;
+    }
+
+    private void AddKillsForEnemyType(string enemyType)
+    {
+        if (enemyType == ENEMY_TYPE_CUBE)
         {
             currentDashKills += 1;
         }
-        else if (enemyType == "Sphere")
+        else if (enemyType == ENEMY_TYPE_SPHERE)
         {
-            if (sphereKillsNeeded > 0)
-            {
-                currentDashKills += cubeKillsNeeded / sphereKillsNeeded;
-            }
+            currentDashKills += CalculateSphereKillValue();
         }
+    }
 
+    private int CalculateSphereKillValue()
+    {
+        if (sphereKillsNeeded > 0)
+        {
+            return cubeKillsNeeded / sphereKillsNeeded;
+        }
+        return 0;
+    }
+
+    private void ClampKills()
+    {
         currentDashKills = Mathf.Min(currentDashKills, cubeKillsNeeded);
+    }
 
-        float fillAmount = 0f;
+    private void UpdateDashUI()
+    {
+        if (dashFillImage == null) return;
+
+        float fillAmount = CalculateFillAmount();
+        dashFillImage.fillAmount = fillAmount;
+    }
+
+    private float CalculateFillAmount()
+    {
         if (cubeKillsNeeded > 0)
         {
-            fillAmount = (float)currentDashKills / (float)cubeKillsNeeded;
+            return (float)currentDashKills / cubeKillsNeeded;
         }
-
-        if (dashFillImage != null)
-        {
-            dashFillImage.fillAmount = fillAmount;
-        }
-
-        bool isReady = (currentDashKills >= cubeKillsNeeded);
-
-        if (isReady && !wasReady)
-        {
-            Debug.Log("¡Dash Recargado!");
-            canDash = true; // <-- La habilidad se activa AQUÍ
-
-            if (damageFeedback != null && dashReadySFX != null)
-            {
-                damageFeedback.PlaySFX(dashReadySFX);
-            }
-
-            if (dashBarAnimator != null)
-            {
-                dashBarAnimator.SetTrigger("OnFull");
-            }
-        }
-
-        // (Bloque 'if (currentDashKills >= cubeKillsNeeded)' eliminado de aquí
-        //  porque era redundante con el bloque 'isReady && !wasReady')
+        return EMPTY_FILL;
     }
-    
-    // --- LÓGICA DE PARTÍCULAS ---
-    void UpdateParticles()
+
+    private void CheckAndActivateDash(bool wasReady)
+    {
+        bool isReadyNow = IsDashReady();
+
+        if (isReadyNow && !wasReady)
+        {
+            ActivateDash();
+        }
+    }
+
+    private void ActivateDash()
+    {
+        canDash = true;
+        PlayDashReadyEffects();
+    }
+
+    private void PlayDashReadyEffects()
+    {
+        PlayDashReadySound();
+        TriggerDashReadyAnimation();
+    }
+
+    private void PlayDashReadySound()
+    {
+        if (damageFeedback != null && dashReadySFX != null)
+        {
+            damageFeedback.PlaySFX(dashReadySFX);
+        }
+    }
+
+    private void TriggerDashReadyAnimation()
+    {
+        if (dashBarAnimator != null)
+        {
+            dashBarAnimator.SetTrigger(DASH_ANIMATION_TRIGGER);
+        }
+    }
+    #endregion
+
+    #region Particles
+    private void UpdateParticles()
     {
         if (playerDustParticles == null) return;
-        
-        if (movementInput.magnitude > 0.1f || isDashing) 
-        {
-            emissionModule.rateOverTime = dustEmissionRate;
-        }
-        else
-        {
-            emissionModule.rateOverTime = 0;
-        }
+
+        bool shouldEmit = ShouldEmitParticles();
+        emissionModule.rateOverTime = shouldEmit ? dustEmissionRate : 0;
     }
+
+    private bool ShouldEmitParticles()
+    {
+        return movementInput.magnitude > MIN_INPUT_MAGNITUDE || isDashing;
+    }
+    #endregion
 }
