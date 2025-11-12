@@ -5,27 +5,58 @@ using TMPro;
 using UnityEngine.AI;
 using System.Linq;
 
+/// <summary>
+/// Sistema de spawn de enemigos por etapas temporales. Gestiona oleadas progresivas
+/// con spawning optimizado y distribuido en frames.
+/// </summary>
 public class EnemySpawner : MonoBehaviour
 {
+    #region Singleton
     public static EnemySpawner Instance { get; private set; }
+    #endregion
 
-    [Header("Etapas Temporales (Eventos)")]
+    #region Constants
+    private const string PLAYER_TAG = "Player";
+    private const string INITIAL_STAGE_NAME = "Iniciando";
+    private const int SPAWN_POSITION_CACHE_SIZE = 10;
+    #endregion
+
+    #region Serialized Fields
+    [Header("Stages")]
     [SerializeField] private List<TemporalStage> stages;
 
-    [Header("Conexión HUD")]
+    [Header("UI")]
     [SerializeField] private TextMeshProUGUI hudStageText;
 
-    [Header("Optimización")]
-    [SerializeField] private float frameTimeBudgetMs = 4f; // Más agresivo
-    [SerializeField] private int maxEnemiesPerFrame = 1; // SOLO 1 enemigo por frame
-    [SerializeField] private float delayBetweenSpawns = 0.05f; // Delay adicional entre spawns
+    [Header("Performance")]
+    [SerializeField, Min(0f)] private float frameTimeBudgetMs = 4f;
+    [SerializeField, Min(1)] private int maxEnemiesPerFrame = 1;
+    [SerializeField, Min(0f)] private float delayBetweenSpawns = 0.05f;
     
-    [Header("Configuración de Spawn")]
-    [SerializeField] private float minSpawnDistance = 20f;
-    [SerializeField] private float maxSpawnDistance = 25f;
-    [SerializeField] private float navMeshSampleDistance = 5f;
-    [SerializeField] private int maxSpawnAttemptsPerEnemy = 1; // Reducido de 5 a 3
+    [Header("Spawn Settings")]
+    [SerializeField, Min(0f)] private float minSpawnDistance = 20f;
+    [SerializeField, Min(0f)] private float maxSpawnDistance = 25f;
+    [SerializeField, Min(0f)] private float navMeshSampleDistance = 5f;
+    [SerializeField, Min(1)] private int maxSpawnAttemptsPerEnemy = 3;
+    #endregion
 
+    #region Private Fields
+    private Transform playerTransform;
+    private Coroutine currentGoteoLoop;
+    private int currentStageIndex;
+    private float gameTimeClock;
+    private bool isPaused;
+    private readonly Vector3[] spawnPositionCache = new Vector3[SPAWN_POSITION_CACHE_SIZE];
+    private int cacheIndex;
+    #endregion
+
+    #region Properties
+    public float GameTime => gameTimeClock;
+    public int CurrentStageIndex => currentStageIndex;
+    public bool IsSpawning => currentGoteoLoop != null;
+    #endregion
+
+    #region Nested Classes
     [System.Serializable]
     public class TemporalStage
     {
@@ -33,7 +64,7 @@ public class EnemySpawner : MonoBehaviour
         public float triggerTimestamp;
         public float goteoRateForThisStage = 3f;
         public List<EnemyGroup> goteoContent;
-        [HideInInspector] public bool hasBeenTriggered = false;
+        [HideInInspector] public bool hasBeenTriggered;
     }
 
     [System.Serializable]
@@ -42,26 +73,39 @@ public class EnemySpawner : MonoBehaviour
         public GameObject enemyPrefab;
         public int amount;
     }
-
-    // --- Variables privadas ---
-    private Transform playerTransform;
-    private Coroutine currentGoteoLoop;
-    private int currentStageIndex = 0;
-    private float gameTimeClock = 0f;
-    private bool isPaused = false;
-
-    // Pool para reutilizar Vector3 y reducir asignaciones
-    private readonly Vector3[] spawnPositionCache = new Vector3[10];
-    private int cacheIndex = 0;
-
-    // --- Propiedades públicas ---
-    public float GameTime => gameTimeClock;
-    public int CurrentStageIndex => currentStageIndex;
-    public bool IsSpawning => currentGoteoLoop != null;
+    #endregion
 
     #region Unity Lifecycle
+    private void Awake()
+    {
+        InitializeSingleton();
+    }
 
-    void Awake()
+    private void Start()
+    {
+        InitializeSpawner();
+    }
+
+    private void FixedUpdate()
+    {
+        UpdateGameClock();
+    }
+
+    private void Update()
+    {
+        if (isPaused || playerTransform == null) return;
+        
+        CheckAndTriggerNextStage();
+    }
+
+    private void OnDestroy()
+    {
+        CleanupSingleton();
+    }
+    #endregion
+
+    #region Initialization
+    private void InitializeSingleton()
     {
         if (Instance == null)
         {
@@ -70,143 +114,118 @@ public class EnemySpawner : MonoBehaviour
         else
         {
             Destroy(gameObject);
-            return;
         }
     }
-
-    void Start()
-    {
-        InitializeSpawner();
-    }
-
-    void FixedUpdate()
-    {
-        // Solo avanza el reloj si el juego no está pausado
-        if (!isPaused && Time.timeScale > 0f)
-        {
-            gameTimeClock += Time.fixedDeltaTime;
-        }
-    }
-
-    void Update()
-    {
-        if (isPaused || playerTransform == null) return;
-        
-        CheckAndTriggerNextStage();
-    }
-
-    void OnDestroy()
-    {
-        if (Instance == this)
-        {
-            Instance = null;
-        }
-    }
-
-    #endregion
-
-    #region Initialization
 
     private void InitializeSpawner()
     {
-        // Buscar jugador
-        GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
+        FindPlayer();
+        PrepareStages();
+        ResetSpawner();
+    }
+
+    private void FindPlayer()
+    {
+        GameObject playerObject = GameObject.FindGameObjectWithTag(PLAYER_TAG);
+        
         if (playerObject != null)
         {
             playerTransform = playerObject.transform;
         }
         else
         {
-            Debug.LogError("EnemySpawner: No se encontró GameObject con tag 'Player'");
+            Debug.LogError("EnemySpawner: Player GameObject not found. Ensure it has 'Player' tag.", this);
+        }
+    }
+
+    private void PrepareStages()
+    {
+        if (stages == null || stages.Count == 0)
+        {
+            Debug.LogWarning("EnemySpawner: No stages configured", this);
+            return;
         }
 
-        // Ordenar etapas por timestamp
-        if (stages != null && stages.Count > 0)
-        {
-            stages = stages.OrderBy(stage => stage.triggerTimestamp).ToList();
-            ValidateStages();
-        }
-        else
-        {
-            Debug.LogWarning("EnemySpawner: No hay etapas configuradas");
-        }
-
-        ResetSpawner();
+        stages = stages.OrderBy(stage => stage.triggerTimestamp).ToList();
+        ValidateStages();
     }
 
     private void ValidateStages()
     {
         for (int i = 0; i < stages.Count; i++)
         {
-            var stage = stages[i];
-            
-            if (string.IsNullOrEmpty(stage.stageName))
+            ValidateStage(stages[i], i);
+        }
+    }
+
+    private void ValidateStage(TemporalStage stage, int index)
+    {
+        if (string.IsNullOrEmpty(stage.stageName))
+        {
+            Debug.LogWarning($"EnemySpawner: Stage {index} has no name", this);
+        }
+        
+        if (stage.goteoContent == null || stage.goteoContent.Count == 0)
+        {
+            Debug.LogWarning($"EnemySpawner: Stage '{stage.stageName}' has no content", this);
+            return;
+        }
+
+        ValidateStageContent(stage);
+    }
+
+    private void ValidateStageContent(TemporalStage stage)
+    {
+        foreach (var group in stage.goteoContent)
+        {
+            if (group.enemyPrefab == null)
             {
-                Debug.LogWarning($"EnemySpawner: Etapa {i} no tiene nombre");
-            }
-            
-            if (stage.goteoContent == null || stage.goteoContent.Count == 0)
-            {
-                Debug.LogWarning($"EnemySpawner: Etapa '{stage.stageName}' no tiene contenido de goteo");
-            }
-            else
-            {
-                foreach (var group in stage.goteoContent)
-                {
-                    if (group.enemyPrefab == null)
-                    {
-                        Debug.LogError($"EnemySpawner: Grupo en etapa '{stage.stageName}' tiene prefab nulo");
-                    }
-                }
+                Debug.LogError($"EnemySpawner: Group in stage '{stage.stageName}' has null prefab", this);
             }
         }
     }
 
+    private void CleanupSingleton()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
     #endregion
 
-    #region Public Methods
+    #region Game Clock
+    private void UpdateGameClock()
+    {
+        if (!isPaused && Time.timeScale > 0f)
+        {
+            gameTimeClock += Time.fixedDeltaTime;
+        }
+    }
+    #endregion
 
+    #region Public Control Methods
     public void ResetSpawner()
     {
-        Debug.Log("EnemySpawner: Reseteando spawner");
-        
         gameTimeClock = 0f;
         currentStageIndex = 0;
         isPaused = false;
 
         StopCurrentGoteoLoop();
-
-        // Resetear flags de etapas
-        foreach (var stage in stages)
-        {
-            stage.hasBeenTriggered = false;
-        }
-
-        UpdateHUD("Iniciando");
+        ResetStageFlags();
+        UpdateHUD(INITIAL_STAGE_NAME);
     }
 
     public void PauseSpawner()
     {
         isPaused = true;
         StopCurrentGoteoLoop();
-        Debug.Log("EnemySpawner: Pausado");
     }
 
     public void ResumeSpawner()
     {
         isPaused = false;
-        
-        // Reanudar la etapa actual si existe
-        if (currentStageIndex > 0 && currentStageIndex <= stages.Count)
-        {
-            var currentStage = stages[currentStageIndex - 1];
-            if (currentStage.hasBeenTriggered)
-            {
-                StartGoteoLoop(currentStage);
-            }
-        }
-        
-        Debug.Log("EnemySpawner: Reanudado");
+        ResumeCurrentStage();
     }
 
     public void SetGameTime(float time)
@@ -222,11 +241,9 @@ public class EnemySpawner : MonoBehaviour
             currentStageIndex++;
         }
     }
-
     #endregion
 
     #region Stage Management
-
     private void CheckAndTriggerNextStage()
     {
         if (currentStageIndex >= stages.Count) return;
@@ -244,33 +261,19 @@ public class EnemySpawner : MonoBehaviour
     {
         if (stage.hasBeenTriggered)
         {
-            Debug.LogWarning($"EnemySpawner: Intentando activar etapa '{stage.stageName}' que ya fue activada");
+            Debug.LogWarning($"EnemySpawner: Stage '{stage.stageName}' already triggered", this);
             return;
         }
 
         stage.hasBeenTriggered = true;
         UpdateHUD(stage.stageName);
-        Debug.Log($"EnemySpawner: Etapa activada '{stage.stageName}' en t={gameTimeClock:F2}s");
-
         StartGoteoLoop(stage);
     }
 
     private void StartGoteoLoop(TemporalStage stage)
     {
         StopCurrentGoteoLoop();
-        currentGoteoLoop = StartCoroutine(SpawnGoteoLoop_ForStage(stage));
-    }
-
-    private IEnumerator SpawnInitialWaveDelayed(TemporalStage stage)
-    {
-        // Esperar un frame antes de empezar
-        yield return null;
-        
-        // Spawnear la primera oleada de forma optimizada
-        if (stage.goteoContent != null && stage.goteoContent.Count > 0)
-        {
-            yield return StartCoroutine(SpawnWave_Optimized(stage.goteoContent));
-        }
+        currentGoteoLoop = StartCoroutine(SpawnGoteoLoop(stage));
     }
 
     private void StopCurrentGoteoLoop()
@@ -282,76 +285,80 @@ public class EnemySpawner : MonoBehaviour
         }
     }
 
+    private void ResetStageFlags()
+    {
+        foreach (var stage in stages)
+        {
+            stage.hasBeenTriggered = false;
+        }
+    }
+
+    private void ResumeCurrentStage()
+    {
+        if (currentStageIndex > 0 && currentStageIndex <= stages.Count)
+        {
+            var currentStage = stages[currentStageIndex - 1];
+            if (currentStage.hasBeenTriggered)
+            {
+                StartGoteoLoop(currentStage);
+            }
+        }
+    }
     #endregion
 
     #region Spawning Coroutines
-
-    private IEnumerator SpawnGoteoLoop_ForStage(TemporalStage stage)
+    private IEnumerator SpawnGoteoLoop(TemporalStage stage)
     {
-        // Primera oleada inmediata pero distribuida en frames
-        yield return StartCoroutine(SpawnWave_Optimized(stage.goteoContent));
+        yield return StartCoroutine(SpawnWaveOptimized(stage.goteoContent));
         
-        // Luego continuar con el ciclo normal
         while (!isPaused)
         {
             yield return new WaitForSeconds(stage.goteoRateForThisStage);
             
             if (!isPaused && stage.goteoContent != null)
             {
-                yield return StartCoroutine(SpawnWave_Optimized(stage.goteoContent));
+                yield return StartCoroutine(SpawnWaveOptimized(stage.goteoContent));
             }
         }
     }
 
-    private IEnumerator SpawnWave_Optimized(List<EnemyGroup> goteoContent)
+    private IEnumerator SpawnWaveOptimized(List<EnemyGroup> content)
     {
-        foreach (var group in goteoContent)
+        foreach (var group in content)
         {
             if (group.enemyPrefab == null) continue;
 
             for (int i = 0; i < group.amount; i++)
             {
                 SpawnEnemy(group.enemyPrefab);
-                
-                // Ceder control después de CADA spawn individual
                 yield return new WaitForSeconds(delayBetweenSpawns);
             }
         }
     }
-
     #endregion
 
     #region Spawn Logic
-
     private void SpawnEnemy(GameObject enemyPrefab)
     {
-        if (playerTransform == null)
-        {
-            Debug.LogWarning("EnemySpawner: PlayerTransform es null, no se puede spawnear enemigo");
-            return;
-        }
+        if (!CanSpawn()) return;
 
-        Vector3 spawnPosition;
-        bool validPositionFound = TryGetValidSpawnPosition(out spawnPosition);
-
-        if (validPositionFound)
+        if (TryGetValidSpawnPosition(out Vector3 spawnPosition))
         {
-            // Verificación final: asegurar que NO está demasiado cerca del player
-            float distanceToPlayer = Vector3.Distance(spawnPosition, playerTransform.position);
-            
-            if (distanceToPlayer >= minSpawnDistance)
+            if (IsValidDistanceFromPlayer(spawnPosition))
             {
                 Instantiate(enemyPrefab, spawnPosition, Quaternion.identity);
             }
-            else
-            {
-                Debug.LogWarning($"EnemySpawner: Posición muy cerca del jugador ({distanceToPlayer:F1}m), spawn cancelado");
-            }
         }
-        else
+    }
+
+    private bool CanSpawn()
+    {
+        if (playerTransform == null)
         {
-            Debug.LogWarning("EnemySpawner: No se pudo encontrar posición válida tras múltiples intentos");
+            Debug.LogWarning("EnemySpawner: Cannot spawn, player transform is null", this);
+            return false;
         }
+        return true;
     }
 
     private bool TryGetValidSpawnPosition(out Vector3 position)
@@ -360,27 +367,13 @@ public class EnemySpawner : MonoBehaviour
 
         for (int attempt = 0; attempt < maxSpawnAttemptsPerEnemy; attempt++)
         {
-            // Calcular posición aleatoria en un anillo alrededor del jugador
-            float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-            float distance = Random.Range(minSpawnDistance, maxSpawnDistance);
-            
-            Vector3 offset = new Vector3(
-                Mathf.Cos(angle) * distance,
-                0f,
-                Mathf.Sin(angle) * distance
-            );
-            
-            Vector3 targetPosition = playerTransform.position + offset;
+            Vector3 targetPosition = CalculateRandomPositionAroundPlayer();
 
-            // Buscar en el NavMesh
-            NavMeshHit hit;
-            if (NavMesh.SamplePosition(targetPosition, out hit, navMeshSampleDistance, NavMesh.AllAreas))
+            if (TryFindNavMeshPosition(targetPosition, out Vector3 navMeshPosition))
             {
-                // Verificación FINAL de distancia
-                float finalDistance = Vector3.Distance(hit.position, playerTransform.position);
-                if (finalDistance >= minSpawnDistance)
+                if (IsValidDistanceFromPlayer(navMeshPosition))
                 {
-                    position = hit.position;
+                    position = navMeshPosition;
                     return true;
                 }
             }
@@ -389,9 +382,8 @@ public class EnemySpawner : MonoBehaviour
         return false;
     }
 
-    private Vector3 GetRandomPositionAroundPlayer()
+    private Vector3 CalculateRandomPositionAroundPlayer()
     {
-        // Esta función ya no es necesaria pero la mantengo por compatibilidad
         float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
         float distance = Random.Range(minSpawnDistance, maxSpawnDistance);
         
@@ -404,10 +396,27 @@ public class EnemySpawner : MonoBehaviour
         return playerTransform.position + offset;
     }
 
+    private bool TryFindNavMeshPosition(Vector3 targetPosition, out Vector3 navMeshPosition)
+    {
+        navMeshPosition = Vector3.zero;
+
+        if (NavMesh.SamplePosition(targetPosition, out NavMeshHit hit, navMeshSampleDistance, NavMesh.AllAreas))
+        {
+            navMeshPosition = hit.position;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool IsValidDistanceFromPlayer(Vector3 position)
+    {
+        float distance = Vector3.Distance(position, playerTransform.position);
+        return distance >= minSpawnDistance;
+    }
     #endregion
 
     #region UI
-
     private void UpdateHUD(string stageName)
     {
         if (hudStageText != null)
@@ -415,28 +424,31 @@ public class EnemySpawner : MonoBehaviour
             hudStageText.text = $"ETAPA: {stageName}";
         }
     }
-
     #endregion
 
     #region Debug Helpers
-
 #if UNITY_EDITOR
-    [ContextMenu("Debug: Mostrar Info Actual")]
+    [ContextMenu("Debug: Show Current Info")]
     private void DebugShowCurrentInfo()
     {
         Debug.Log($"=== EnemySpawner Info ===\n" +
-                  $"Tiempo de juego: {gameTimeClock:F2}s\n" +
-                  $"Etapa actual: {currentStageIndex}/{stages.Count}\n" +
-                  $"Pausado: {isPaused}\n" +
-                  $"Spawneando: {IsSpawning}");
+                  $"Game Time: {gameTimeClock:F2}s\n" +
+                  $"Current Stage: {currentStageIndex}/{stages.Count}\n" +
+                  $"Paused: {isPaused}\n" +
+                  $"Spawning: {IsSpawning}", this);
     }
 
-    [ContextMenu("Debug: Forzar Siguiente Etapa")]
+    [ContextMenu("Debug: Force Next Stage")]
     private void DebugForceNextStage()
     {
         ForceNextStage();
     }
-#endif
 
+    [ContextMenu("Debug: Reset Spawner")]
+    private void DebugResetSpawner()
+    {
+        ResetSpawner();
+    }
+#endif
     #endregion
 }
