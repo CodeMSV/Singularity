@@ -2,54 +2,44 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using System.Collections;
-using System.Collections.Generic;
 using TMPro;
 
 public class Preloader : MonoBehaviour
 {
-    [Header("⚠️ IMPORTANTE: Arrastra TODOS los Canvas Prefabs")]
+    [Header("UI Prefabs Configuration")]
     [SerializeField] private GameObject[] uiPrefabsToPrewarm;
 
-    [Header("Configuración de Carga")]
+    [Header("Loading Settings")]
     [SerializeField] private float minDisplayTime = 3.0f;
     [SerializeField] private string nextSceneName = "Menu";
 
-    [Header("Configuración de Precarga")]
-    [Tooltip("Tiempo que cada Canvas permanece activo (0.05-0.1 recomendado)")]
+    [Header("Preload Settings")]
+    [Tooltip("Time each Canvas remains active (0.05-0.1 recommended)")]
     [SerializeField] private float holdTimePerPrefab = 0.05f;
-    [Tooltip("Frames extra de espera (1-2 suficiente)")]
+    [Tooltip("Extra frames to wait (1-2 sufficient)")]
     [SerializeField] private int extraFramesToWait = 1;
 
     [Header("Debug")]
     [SerializeField] private bool showDebugLogs = true;
 
-    [Header("Logo de Carga (Opcional)")]
+    [Header("Loading UI (Optional)")]
     [SerializeField] private Canvas loadingLogoCanvas;
-    [Tooltip("Texto que muestra el progreso (opcional)")]
     [SerializeField] private Text loadingText;
 
     private Canvas prewarmCanvas;
-    private int totalPrewarmed = 0;
+    private int totalPrewarmed;
 
-    void Start()
+    private const int PREWARM_SORTING_ORDER = -9999;
+    private static readonly Vector2 REFERENCE_RESOLUTION = new Vector2(1920, 1080);
+
+    private void Start()
     {
         Time.timeScale = 1f;
         
-        Log("========================================");
-        Log("PRELOADER INICIADO");
-        Log($"Escena actual: {SceneManager.GetActiveScene().name}");
-        Log($"Escena objetivo: {nextSceneName}");
-        Log($"Prefabs a precargar: {(uiPrefabsToPrewarm != null ? uiPrefabsToPrewarm.Length : 0)}");
-        Log("========================================");
+        LogHeader();
         
-        if (uiPrefabsToPrewarm == null || uiPrefabsToPrewarm.Length == 0)
+        if (!ValidateConfiguration())
         {
-            LogError("⚠️ ARRAY DE PREFABS VACÍO!");
-        }
-        
-        if (!SceneExists(nextSceneName))
-        {
-            LogError($"❌ La escena '{nextSceneName}' NO está en Build Settings!");
             return;
         }
         
@@ -57,16 +47,43 @@ public class Preloader : MonoBehaviour
         StartCoroutine(LoadGameFlow());
     }
 
-    void CreatePrewarmCanvas()
+    private void LogHeader()
+    {
+        Log("========================================");
+        Log("PRELOADER STARTED");
+        Log($"Current scene: {SceneManager.GetActiveScene().name}");
+        Log($"Target scene: {nextSceneName}");
+        Log($"Prefabs to preload: {(uiPrefabsToPrewarm?.Length ?? 0)}");
+        Log("========================================");
+    }
+
+    private bool ValidateConfiguration()
+    {
+        if (uiPrefabsToPrewarm == null || uiPrefabsToPrewarm.Length == 0)
+        {
+            LogError("Prefabs array is empty!");
+            return false;
+        }
+        
+        if (!SceneExists(nextSceneName))
+        {
+            LogError($"Scene '{nextSceneName}' is not in Build Settings!");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void CreatePrewarmCanvas()
     {
         GameObject canvasObj = new GameObject("_PrewarmCanvas_");
         prewarmCanvas = canvasObj.AddComponent<Canvas>();
         prewarmCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        prewarmCanvas.sortingOrder = -9999;
+        prewarmCanvas.sortingOrder = PREWARM_SORTING_ORDER;
         
         CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.referenceResolution = REFERENCE_RESOLUTION;
         
         canvasObj.AddComponent<GraphicRaycaster>();
         
@@ -75,25 +92,35 @@ public class Preloader : MonoBehaviour
         group.interactable = false;
         group.blocksRaycasts = false;
         
-        Log("✓ Canvas de precarga creado");
+        Log("Prewarm canvas created");
     }
 
-    IEnumerator LoadGameFlow()
+    private IEnumerator LoadGameFlow()
     {
         float startTime = Time.realtimeSinceStartup;
 
-        Log(">>> INICIANDO PRECARGA DE UI <<<");
+        Log("Starting UI preload");
         yield return PrewarmAllUI();
         
         float prewarmTime = Time.realtimeSinceStartup - startTime;
-        Log($"✓✓✓ PRECARGA COMPLETADA en {prewarmTime:F2}s");
-        Log($"Total precargado: {totalPrewarmed} prefabs");
+        Log($"Preload completed in {prewarmTime:F2}s");
+        Log($"Total preloaded: {totalPrewarmed} prefabs");
 
-        float remainingTime = minDisplayTime - prewarmTime;
+        yield return WaitForMinimumDisplayTime(startTime);
+
+        CleanupPrewarmCanvas();
+
+        yield return LoadTargetScene();
+    }
+
+    private IEnumerator WaitForMinimumDisplayTime(float startTime)
+    {
+        float elapsedTime = Time.realtimeSinceStartup - startTime;
+        float remainingTime = minDisplayTime - elapsedTime;
         
         if (remainingTime > 0)
         {
-            Log($"Esperando {remainingTime:F2}s...");
+            Log($"Waiting {remainingTime:F2}s...");
             float timer = 0;
             while (timer < remainingTime)
             {
@@ -101,13 +128,19 @@ public class Preloader : MonoBehaviour
                 yield return null;
             }
         }
+    }
 
+    private void CleanupPrewarmCanvas()
+    {
         if (prewarmCanvas != null)
         {
             Destroy(prewarmCanvas.gameObject);
         }
+    }
 
-        Log($">>> CARGANDO ESCENA: {nextSceneName} <<<");
+    private IEnumerator LoadTargetScene()
+    {
+        Log($"Loading scene: {nextSceneName}");
         
         AsyncOperation asyncLoad = SceneManager.LoadSceneAsync(nextSceneName);
         asyncLoad.allowSceneActivation = false;
@@ -117,15 +150,15 @@ public class Preloader : MonoBehaviour
             yield return null;
         }
         
-        Log("✓ Escena lista, activando...");
+        Log("Scene ready, activating...");
         asyncLoad.allowSceneActivation = true;
     }
 
-    IEnumerator PrewarmAllUI()
+    private IEnumerator PrewarmAllUI()
     {
         if (uiPrefabsToPrewarm == null || uiPrefabsToPrewarm.Length == 0)
         {
-            LogWarning("No hay prefabs!");
+            LogWarning("No prefabs to prewarm!");
             yield break;
         }
 
@@ -133,137 +166,195 @@ public class Preloader : MonoBehaviour
 
         for (int i = 0; i < uiPrefabsToPrewarm.Length; i++)
         {
-            GameObject prefab = uiPrefabsToPrewarm[i];
-            
-            if (prefab == null)
-            {
-                LogWarning($"Prefab #{i} es NULL");
-                continue;
-            }
-
-            Log($"[{i+1}/{uiPrefabsToPrewarm.Length}] Precargando: {prefab.name}");
-            
-            float prefabStartTime = Time.realtimeSinceStartup;
-            
-            // Actualizar texto de progreso (opcional)
-            if (loadingText != null)
-            {
-                loadingText.text = $"Cargando... {i+1}/{uiPrefabsToPrewarm.Length}";
-            }
-
-            GameObject instance = Instantiate(prefab, prewarmCanvas.transform);
-            instance.name = $"[PREWARM] {prefab.name}";
-            instance.SetActive(true);
-            
-            Canvas[] canvases = instance.GetComponentsInChildren<Canvas>(true);
-            foreach (Canvas c in canvases)
-            {
-                if (c != null) c.enabled = true;
-            }
-            
-            Canvas.ForceUpdateCanvases();
-            ForceLoadGraphics(instance);
-            
-            yield return null;
-            
-            for (int f = 0; f < extraFramesToWait; f++)
-            {
-                yield return null;
-            }
-            
-            if (holdTimePerPrefab > 0)
-            {
-                float timer = 0;
-                while (timer < holdTimePerPrefab)
-                {
-                    timer += Time.unscaledDeltaTime;
-                    yield return null;
-                }
-            }
-            
-            float prefabTime = Time.realtimeSinceStartup - prefabStartTime;
-            Log($"  ✓ {prefab.name} OK (tardó {prefabTime:F3}s)");
-            totalPrewarmed++;
-            
-            Destroy(instance);
+            yield return PrewarmSinglePrefab(uiPrefabsToPrewarm[i], i);
         }
     }
 
-    void ForceLoadGraphics(GameObject obj)
+    private IEnumerator PrewarmSinglePrefab(GameObject prefab, int index)
     {
-        int total = 0;
+        if (prefab == null)
+        {
+            LogWarning($"Prefab #{index} is NULL");
+            yield break;
+        }
 
+        Log($"[{index + 1}/{uiPrefabsToPrewarm.Length}] Preloading: {prefab.name}");
+        
+        float prefabStartTime = Time.realtimeSinceStartup;
+        
+        UpdateLoadingText(index);
+
+        GameObject instance = InstantiateAndActivatePrefab(prefab);
+        
+        Canvas.ForceUpdateCanvases();
+        ForceLoadGraphics(instance);
+        
+        yield return null;
+        yield return WaitExtraFrames();
+        yield return HoldPrefabInstance();
+        
+        LogPrefabCompletion(prefab, prefabStartTime);
+        
+        Destroy(instance);
+        totalPrewarmed++;
+    }
+
+    private void UpdateLoadingText(int index)
+    {
+        if (loadingText != null)
+        {
+            loadingText.text = $"Loading... {index + 1}/{uiPrefabsToPrewarm.Length}";
+        }
+    }
+
+    private GameObject InstantiateAndActivatePrefab(GameObject prefab)
+    {
+        GameObject instance = Instantiate(prefab, prewarmCanvas.transform);
+        instance.name = $"[PREWARM] {prefab.name}";
+        instance.SetActive(true);
+        
+        Canvas[] canvases = instance.GetComponentsInChildren<Canvas>(true);
+        foreach (Canvas canvas in canvases)
+        {
+            if (canvas != null)
+            {
+                canvas.enabled = true;
+            }
+        }
+
+        return instance;
+    }
+
+    private IEnumerator WaitExtraFrames()
+    {
+        for (int i = 0; i < extraFramesToWait; i++)
+        {
+            yield return null;
+        }
+    }
+
+    private IEnumerator HoldPrefabInstance()
+    {
+        if (holdTimePerPrefab > 0)
+        {
+            float timer = 0;
+            while (timer < holdTimePerPrefab)
+            {
+                timer += Time.unscaledDeltaTime;
+                yield return null;
+            }
+        }
+    }
+
+    private void LogPrefabCompletion(GameObject prefab, float startTime)
+    {
+        float prefabTime = Time.realtimeSinceStartup - startTime;
+        Log($"  {prefab.name} completed ({prefabTime:F3}s)");
+    }
+
+    private void ForceLoadGraphics(GameObject obj)
+    {
+        int totalComponents = 0;
+
+        totalComponents += ForceLoadImages(obj);
+        totalComponents += ForceLoadRawImages(obj);
+        totalComponents += ForceLoadTextMeshPro(obj);
+        totalComponents += ForceLoadTexts(obj);
+        totalComponents += ForceLoadButtons(obj);
+        totalComponents += ForceLoadAnimators(obj);
+
+        Log($"    Components processed: {totalComponents}");
+    }
+
+    private int ForceLoadImages(GameObject obj)
+    {
         Image[] images = obj.GetComponentsInChildren<Image>(true);
         foreach (Image img in images)
         {
             if (img != null)
             {
                 img.enabled = true;
-                var s = img.sprite;
-                var m = img.material;
-                if (m != null) m.SetPass(0);
-                total++;
+                var sprite = img.sprite;
+                var material = img.material;
+                if (material != null)
+                {
+                    material.SetPass(0);
+                }
             }
         }
+        return images.Length;
+    }
 
-        RawImage[] raws = obj.GetComponentsInChildren<RawImage>(true);
-        foreach (RawImage raw in raws)
+    private int ForceLoadRawImages(GameObject obj)
+    {
+        RawImage[] rawImages = obj.GetComponentsInChildren<RawImage>(true);
+        foreach (RawImage raw in rawImages)
         {
             if (raw != null)
             {
                 raw.enabled = true;
-                var t = raw.texture;
-                total++;
+                var texture = raw.texture;
             }
         }
+        return rawImages.Length;
+    }
 
-        TextMeshProUGUI[] tmps = obj.GetComponentsInChildren<TextMeshProUGUI>(true);
-        foreach (TextMeshProUGUI tmp in tmps)
+    private int ForceLoadTextMeshPro(GameObject obj)
+    {
+        TextMeshProUGUI[] textMeshes = obj.GetComponentsInChildren<TextMeshProUGUI>(true);
+        foreach (TextMeshProUGUI tmp in textMeshes)
         {
             if (tmp != null)
             {
                 tmp.enabled = true;
                 tmp.ForceMeshUpdate(true, true);
-                total++;
             }
         }
+        return textMeshes.Length;
+    }
 
+    private int ForceLoadTexts(GameObject obj)
+    {
         Text[] texts = obj.GetComponentsInChildren<Text>(true);
         foreach (Text txt in texts)
         {
             if (txt != null)
             {
                 txt.enabled = true;
-                total++;
             }
         }
+        return texts.Length;
+    }
 
-        Button[] btns = obj.GetComponentsInChildren<Button>(true);
-        foreach (Button btn in btns)
+    private int ForceLoadButtons(GameObject obj)
+    {
+        Button[] buttons = obj.GetComponentsInChildren<Button>(true);
+        foreach (Button btn in buttons)
         {
             if (btn != null)
             {
                 btn.enabled = true;
-                var tg = btn.targetGraphic;
-                total++;
+                var targetGraphic = btn.targetGraphic;
             }
         }
+        return buttons.Length;
+    }
 
-        Animator[] anims = obj.GetComponentsInChildren<Animator>(true);
-        foreach (Animator anim in anims)
+    private int ForceLoadAnimators(GameObject obj)
+    {
+        Animator[] animators = obj.GetComponentsInChildren<Animator>(true);
+        foreach (Animator anim in animators)
         {
             if (anim != null)
             {
                 anim.enabled = true;
-                var ctrl = anim.runtimeAnimatorController;
-                total++;
+                var controller = anim.runtimeAnimatorController;
             }
         }
-
-        Log($"    → Componentes: {total}");
+        return animators.Length;
     }
 
-    bool SceneExists(string sceneName)
+    private bool SceneExists(string sceneName)
     {
         for (int i = 0; i < SceneManager.sceneCountInBuildSettings; i++)
         {
@@ -272,34 +363,40 @@ public class Preloader : MonoBehaviour
             
             if (name == sceneName)
             {
-                Log($"✓ Escena '{sceneName}' encontrada");
+                Log($"Scene '{sceneName}' found in build settings");
                 return true;
             }
         }
         return false;
     }
 
-    void Log(string msg)
+    private void Log(string msg)
     {
-        if (showDebugLogs) Debug.Log($"[Preloader] {msg}");
+        if (showDebugLogs)
+        {
+            Debug.Log($"[Preloader] {msg}");
+        }
     }
 
-    void LogWarning(string msg)
+    private void LogWarning(string msg)
     {
-        if (showDebugLogs) Debug.LogWarning($"[Preloader] {msg}");
+        if (showDebugLogs)
+        {
+            Debug.LogWarning($"[Preloader] {msg}");
+        }
     }
 
-    void LogError(string msg)
+    private void LogError(string msg)
     {
         Debug.LogError($"[Preloader] {msg}");
     }
 
-    #if UNITY_EDITOR
-    void OnValidate()
+#if UNITY_EDITOR
+    private void OnValidate()
     {
-        if (minDisplayTime < 0) minDisplayTime = 0;
-        if (holdTimePerPrefab < 0) holdTimePerPrefab = 0;
-        if (extraFramesToWait < 0) extraFramesToWait = 0;
+        minDisplayTime = Mathf.Max(0, minDisplayTime);
+        holdTimePerPrefab = Mathf.Max(0, holdTimePerPrefab);
+        extraFramesToWait = Mathf.Max(0, extraFramesToWait);
     }
-    #endif
+#endif
 }

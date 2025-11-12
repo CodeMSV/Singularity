@@ -592,9 +592,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::GameManager
   novaFillImage: {fileID: 1331378751}
   novaKillsThreshold: 50
-  novaUnleashVolume: 3
   novaRadius: 20
   novaDamage: 99
+  novaUnleashVolume: 3
   novaEffectPrefab: {fileID: 4490686455001297208, guid: 38499720084fd47df967cae53ae82129, type: 3}
   novaReadySFX: {fileID: 0}
   novaUnleashSFX: {fileID: 8300000, guid: 81e01113e3c36453484fc1ac85cad14e, type: 3}
@@ -1013,9 +1013,11 @@ MonoBehaviour:
   stages:
   - stageName: 1
     triggerTimestamp: 5
-    goteoRateForThisStage: 5
+    goteoRateForThisStage: 4
     goteoContent:
     - enemyPrefab: {fileID: 656912679220456685, guid: 32b01ef5307e5431782d607e2cdf1ef2, type: 3}
+      amount: 0
+    - enemyPrefab: {fileID: 6536884951264285628, guid: 6728f606a9b4f43d0b9bdeee470845ee, type: 3}
       amount: 3
     hasBeenTriggered: 0
   - stageName: 2
@@ -1518,7 +1520,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5321020035935150227, guid: 6c4f5871b4fbf495c9d32fc9dd7b72ea, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 16.039978
+      value: 16.04004
       objectReference: {fileID: 0}
     - target: {fileID: 5321020035935150227, guid: 6c4f5871b4fbf495c9d32fc9dd7b72ea, type: 3}
       propertyPath: m_AnchoredPosition.y
