@@ -1,139 +1,246 @@
-// ----------------------------------------------------
-// ARCHIVO: Enemy_Sphere.cs (Clase Derivada)
-// ----------------------------------------------------
 using UnityEngine;
 using UnityEngine.AI;
-using System.Collections; // ¡CORREGIDO! Para que IEnumerator funcione
+using System.Collections;
 
-// Hereda de la clase Enemy
+/// <summary>
+/// Enemigo esférico que dispara proyectiles al jugador. Aumenta su cadencia de fuego
+/// cuando el jugador está cerca (modo pánico).
+/// </summary>
 public class Enemy_Sphere : Enemy
 {
-    [Header("Ataque de la Esfera")]
-    [Tooltip("Tiempo de cadencia entre disparos")]
-    public float fireRate = 5f;
-    public float shootRange = 15f;
+    #region Constants
+    private const float SPHERE_SPEED_PERCENT = 0.4f;
+    private const float AIM_ROTATION_SPEED = 5f;
+    private const float AIM_DELAY = 0.5f;
+    private const float BULLET_SPEED = 10f;
+    private const float BULLET_SPAWN_OFFSET = 1f;
+    #endregion
 
-    [Header("Disparo Rápido (Pánico)")]
-    public float panicRange = 5f; // Rango para disparar más rápido
-    public float panicFireRate = 1f; // Cadencia en modo pánico
+    #region Serialized Fields
+    [Header("Shooting")]
+    [SerializeField, Min(0f), Tooltip("Tiempo entre disparos (segundos)")]
+    private float fireRate = 5f;
+    
+    [SerializeField, Min(0f), Tooltip("Rango máximo de disparo")]
+    private float shootRange = 15f;
 
-    public GameObject enemyBulletPrefab; // Prefab de la bala enemiga
+    [Header("Panic Mode")]
+    [SerializeField, Min(0f), Tooltip("Distancia para activar modo pánico")]
+    private float panicRange = 5f;
+    
+    [SerializeField, Min(0f), Tooltip("Cadencia de disparo en modo pánico")]
+    private float panicFireRate = 1f;
 
+    [Header("Projectile")]
+    [SerializeField]
+    private GameObject enemyBulletPrefab;
+    #endregion
+
+    #region Private Fields
     private float nextFireTime;
-    private bool isShooting = false;
+    private bool isShooting;
+    #endregion
 
-    // ¡CORREGIDO! Usamos 'override'
+    #region Unity Lifecycle
     protected override void Start()
     {
-        // 1. Llama al Start() de la clase base para Awake, agente y jugador
         base.Start();
+        
+        ConfigureSphereSpeed();
+        DisableErraticMovement();
+        InitializeFireTime();
+    }
 
-        // 2. Lógica específica de la Esfera:
+    private void Update()
+    {
+        AimAtPlayer();
+        UpdateShooting();
+        UpdateMovement();
+    }
+    #endregion
 
-        // Asignamos la velocidad al 40% del jugador
+    #region Initialization
+    private void ConfigureSphereSpeed()
+    {
         if (playerMovement != null && agent != null)
         {
-            agent.speed = playerMovement.moveSpeed * 0.4f;
+            agent.speed = playerMovement.moveSpeed * SPHERE_SPEED_PERCENT;
         }
+    }
 
-        // Cancelamos el movimiento errático del Cubo (el Cubo tiene InvokeRepeating)
+    private void DisableErraticMovement()
+    {
         CancelInvoke(nameof(UpdateErraticMovement));
+    }
 
+    private void InitializeFireTime()
+    {
         nextFireTime = Time.time + fireRate;
     }
+    #endregion
 
-    void Update()
-    {
-        // ... (El resto del código es el mismo para la Esfera) ...
-        AimAtPlayer();
-
-        if (playerTransform != null && agent != null)
-        {
-            float distance = Vector3.Distance(transform.position, playerTransform.position);
-
-            float currentFireRate = fireRate;
-            if (distance <= panicRange)
-            {
-                currentFireRate = panicFireRate;
-            }
-
-            if (Time.time >= nextFireTime && distance <= shootRange && !isShooting)
-            {
-                StartCoroutine(StopAimAndShoot(currentFireRate));
-            }
-
-            if (agent.enabled && !isShooting)
-            {
-                agent.SetDestination(playerTransform.position);
-            }
-        }
-    }
-
+    #region Aiming
     private void AimAtPlayer()
     {
         if (playerTransform == null) return;
 
-        Vector3 direction = playerTransform.position - transform.position;
-        direction.y = 0;
-        Quaternion lookRotation = Quaternion.LookRotation(direction);
-
-        transform.rotation = Quaternion.Slerp(transform.rotation, lookRotation, Time.deltaTime * 5f);
+        Vector3 direction = GetHorizontalDirection();
+        Quaternion targetRotation = Quaternion.LookRotation(direction);
+        
+        transform.rotation = Quaternion.Slerp(
+            transform.rotation, 
+            targetRotation, 
+            Time.deltaTime * AIM_ROTATION_SPEED
+        );
     }
 
-    // EN: Enemy_Sphere.cs
+    private Vector3 GetHorizontalDirection()
+    {
+        Vector3 direction = playerTransform.position - transform.position;
+        direction.y = 0f;
+        return direction;
+    }
+    #endregion
 
-    // EN: Enemy_Sphere.cs
+    #region Shooting
+    private void UpdateShooting()
+    {
+        if (!CanShoot()) return;
 
-    IEnumerator StopAimAndShoot(float currentFireRate)
+        float distanceToPlayer = GetDistanceToPlayer();
+        float currentFireRate = GetCurrentFireRate(distanceToPlayer);
+
+        if (IsReadyToShoot(distanceToPlayer))
+        {
+            StartCoroutine(ShootSequence(currentFireRate));
+        }
+    }
+
+    private bool CanShoot()
+    {
+        return playerTransform != null 
+               && agent != null 
+               && !isShooting;
+    }
+
+    private float GetDistanceToPlayer()
+    {
+        return Vector3.Distance(transform.position, playerTransform.position);
+    }
+
+    private float GetCurrentFireRate(float distanceToPlayer)
+    {
+        return distanceToPlayer <= panicRange ? panicFireRate : fireRate;
+    }
+
+    private bool IsReadyToShoot(float distanceToPlayer)
+    {
+        return Time.time >= nextFireTime 
+               && distanceToPlayer <= shootRange;
+    }
+
+    private IEnumerator ShootSequence(float currentFireRate)
     {
         isShooting = true;
 
+        StopAgent();
+        yield return new WaitForSeconds(AIM_DELAY);
+        
+        FireBullet();
+        
+        ScheduleNextShot(currentFireRate);
+        ResumeAgent();
+
+        isShooting = false;
+    }
+
+    private void StopAgent()
+    {
         if (agent != null && agent.isActiveAndEnabled)
         {
-            agent.isStopped = true; // 1. SE DETIENE
+            agent.isStopped = true;
         }
+    }
 
-        yield return new WaitForSeconds(0.5f); // Espera de Apuntado
-
-        if (enemyBulletPrefab != null && playerTransform != null)
-        {
-            // --- ¡¡LÓGICA DE ALTURA CORREGIDA!! ---
-
-            // 1. Obtenemos la altura Y del jugador (ej. -0.5)
-            float playerHeightY = playerTransform.position.y;
-
-            // 2. Obtenemos la posición del enemigo, PERO forzada a la altura del jugador
-            Vector3 enemyFirePos = transform.position;
-            enemyFirePos.y = playerHeightY;
-
-            // 3. Obtenemos la posición del objetivo, TAMBIÉN forzada a la altura del jugador
-            Vector3 targetPoint = playerTransform.position;
-            targetPoint.y = playerHeightY;
-
-            // 4. Calculamos la dirección (ahora es 100% plana en el eje Y del jugador)
-            Vector3 fireDirection = (targetPoint - enemyFirePos).normalized;
-
-            // 5. Calculamos la posición de spawn (un poco delante del enemigo, pero en la Y del jugador)
-            Vector3 spawnPosition = enemyFirePos + fireDirection * 1.0f;
-
-            // 6. Creamos la bala en la altura Y correcta
-            GameObject bullet = Instantiate(enemyBulletPrefab, spawnPosition, Quaternion.LookRotation(fireDirection));
-
-            Rigidbody bulletRb = bullet.GetComponent<Rigidbody>();
-            if (bulletRb != null)
-            {
-                // Usamos .velocity (ya que arreglamos linearVelocity)
-                bulletRb.linearVelocity = fireDirection * 10f;
-            }
-        }
-
-        nextFireTime = Time.time + currentFireRate;
-
+    private void ResumeAgent()
+    {
         if (agent != null)
         {
             agent.isStopped = false;
         }
-
-        isShooting = false;
     }
+
+    private void FireBullet()
+    {
+        if (enemyBulletPrefab == null || playerTransform == null) return;
+
+        Vector3 spawnPosition = CalculateBulletSpawnPosition();
+        Vector3 fireDirection = CalculateFireDirection();
+        
+        GameObject bullet = Instantiate(
+            enemyBulletPrefab, 
+            spawnPosition, 
+            Quaternion.LookRotation(fireDirection)
+        );
+
+        ApplyBulletVelocity(bullet, fireDirection);
+    }
+
+    private Vector3 CalculateBulletSpawnPosition()
+    {
+        float playerHeight = playerTransform.position.y;
+        Vector3 fireDirection = CalculateFireDirection();
+        
+        Vector3 spawnPosition = transform.position;
+        spawnPosition.y = playerHeight;
+        spawnPosition += fireDirection * BULLET_SPAWN_OFFSET;
+        
+        return spawnPosition;
+    }
+
+    private Vector3 CalculateFireDirection()
+    {
+        float playerHeight = playerTransform.position.y;
+        
+        Vector3 enemyPosition = transform.position;
+        enemyPosition.y = playerHeight;
+        
+        Vector3 targetPosition = playerTransform.position;
+        targetPosition.y = playerHeight;
+        
+        return (targetPosition - enemyPosition).normalized;
+    }
+
+    private void ApplyBulletVelocity(GameObject bullet, Vector3 direction)
+    {
+        Rigidbody bulletRb = bullet.GetComponent<Rigidbody>();
+        
+        if (bulletRb != null)
+        {
+            bulletRb.linearVelocity = direction * BULLET_SPEED;
+        }
+    }
+
+    private void ScheduleNextShot(float currentFireRate)
+    {
+        nextFireTime = Time.time + currentFireRate;
+    }
+    #endregion
+
+    #region Movement
+    private void UpdateMovement()
+    {
+        if (!CanMove()) return;
+
+        agent.SetDestination(playerTransform.position);
+    }
+
+    private bool CanMove()
+    {
+        return agent != null 
+               && agent.enabled 
+               && !isShooting 
+               && playerTransform != null;
+    }
+    #endregion
 }
