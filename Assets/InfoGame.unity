@@ -468,20 +468,28 @@ PrefabInstance:
       value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3501882311031201269, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
+      propertyPath: m_AnchorMax.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3501882311031201269, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
+      propertyPath: m_AnchorMin.y
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3501882311031201269, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
       propertyPath: m_SizeDelta.x
-      value: 1920
+      value: 1995.1
       objectReference: {fileID: 0}
     - target: {fileID: 3501882311031201269, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
       propertyPath: m_SizeDelta.y
-      value: 1031.9
+      value: 1019.7
       objectReference: {fileID: 0}
     - target: {fileID: 3501882311031201269, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: -0.000026357
+      value: 0.0036411
       objectReference: {fileID: 0}
     - target: {fileID: 3501882311031201269, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -0.020494
+      value: -509.86
       objectReference: {fileID: 0}
     - target: {fileID: 4187095512273956129, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
       propertyPath: m_AnchoredPosition.x
@@ -552,8 +560,23 @@ PrefabInstance:
       value: UnityEngine.Object, UnityEngine
       objectReference: {fileID: 0}
     - target: {fileID: 8344676305879320538, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
+      propertyPath: m_text
+      value: "GU\xCDA DE SUPERVIVENCIA\n\nTu \xFAnico objetivo es SOBREVIVIR. Elimina
+        a los enemigos para recargar tus habilidades y supera todas las etapas.\n\n\nCONTROLES
+        B\xC1SICOS\n\nMOVERSE: WASD\nAPUNTAR: RAT\xD3N\nDISPARAR: CLIC IZQUIERDO\n\n\nHABILIDADES
+        ESPECIALES\n\nDASH: ESPACIO\nTe vuelve invencible moment\xE1neamente.\nSe
+        recarga eliminando enemigos (5 Cubos o 2 Esferas).\n\nNOVA: CLIC DERECHO\nUna
+        onda expansiva que aniquila todo a tu alrededor.\nSe recarga eliminando 30
+        enemigos (las muertes de la Nova no cuentan).\n\nPAUSA: ESC\n\nSe recomienda
+        el uso de auriculares para su plena experiencia."
+      objectReference: {fileID: 0}
+    - target: {fileID: 8344676305879320538, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
       propertyPath: m_fontSize
       value: 24
+      objectReference: {fileID: 0}
+    - target: {fileID: 8344676305879320538, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
+      propertyPath: m_margin.y
+      value: 11.325989
       objectReference: {fileID: 0}
     - target: {fileID: 8344676305879320538, guid: c1b66b1d1dd2b419c942676b582f1ffd, type: 3}
       propertyPath: m_fontAsset

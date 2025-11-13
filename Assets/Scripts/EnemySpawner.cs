@@ -421,7 +421,7 @@ public class EnemySpawner : MonoBehaviour
     {
         if (hudStageText != null)
         {
-            hudStageText.text = $"ETAPA: {stageName}";
+            hudStageText.text = $"NIVEL {stageName}";
         }
     }
     #endregion
