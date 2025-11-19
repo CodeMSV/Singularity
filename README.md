@@ -3,7 +3,7 @@
 **Motor:** Unity 6+ (API de física actualizada `linearVelocity`)
 **Arquitectura:** Híbrida (Singleton Managers + Component-Based Entities)
 **Patrones de Diseño:** Object Pooling Implícito, Pre-Warming, State Machines, Dependency Injection (Manual).
-
+**Descargar:** [Singularity app](https://drive.google.com/file/d/1oBBlOGJzcBpP_fRnnYBu77KgCx9DC9UV/view?usp=sharing)
 ---
 
 ## 1. Pipeline de Inicialización y Gestión de Memoria (Startup & Loading)
