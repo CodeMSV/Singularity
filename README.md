@@ -177,4 +177,4 @@ El proyecto incluye herramientas específicas para diagnóstico en desarrollo y 
 
 El siguiente video ilustra las mecánicas descritas anteriormente: el sistema de Dash con invencibilidad, la habilidad Nova, el comportamiento de enjambre de la IA y la generación dinámica de obstáculos.
 
-**[ [Singularity](https://www.youtube.com/watch?v=DS_pnemtbRs) ]**
+**[ [Singularity](https://www.youtube.com/watch?v=a9vfFvUDq2U) ]**
