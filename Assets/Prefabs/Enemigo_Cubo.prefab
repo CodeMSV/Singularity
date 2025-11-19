@@ -127,7 +127,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Enemy
   health: 1
-  speedPercent: 1.5
+  speedPercent: 1
   deathSFX: {fileID: 8300000, guid: c261d1b0cc9f44215b5d04432327d9b7, type: 3}
   deathVolume: 0.24
   enemyType: Cube
