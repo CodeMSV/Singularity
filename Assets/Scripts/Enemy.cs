@@ -12,8 +12,13 @@ public class Enemy : MonoBehaviour
     [SerializeField, Min(0f)] 
     private float health = 1f;
     
-    [SerializeField, Range(0f, 1f), Tooltip("Porcentaje de la velocidad del jugador")]
+    [SerializeField, Range(0f, 2f), Tooltip("Porcentaje de la velocidad del jugador")]
     private float speedPercent = 0.6f;
+
+    [Header("Físicas de NavMesh (Anti-Hielo)")]
+    // Valores altos fuerzan frenadas en seco y giros instantáneos.
+    [SerializeField] private float agentAcceleration = 60f;
+    [SerializeField] private float agentAngularSpeed = 1000f;
 
     [Header("Audio")]
     [SerializeField] 
@@ -94,7 +99,15 @@ public class Enemy : MonoBehaviour
     {
         agent = GetComponent<NavMeshAgent>();
         
-        if (agent == null)
+        if (agent != null)
+        {
+            // --- MODIFICACIÓN PARA ELIMINAR EL EFECTO HIELO ---
+            agent.acceleration = agentAcceleration;
+            agent.angularSpeed = agentAngularSpeed;
+            agent.autoBraking = true; // Asegura que el agente frene antes de llegar al destino
+            // ----------------------------------------------------
+        }
+        else
         {
             Debug.LogError($"NavMeshAgent missing on {gameObject.name}", this);
         }

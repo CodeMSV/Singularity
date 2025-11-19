@@ -28,7 +28,7 @@ public class PlayerShooting : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetMouseButtonDown(0) && Time.time >= nextFireTime)
+        if (Input.GetMouseButton(0) && Time.time >= nextFireTime)
         {
             nextFireTime = Time.time + fireRate;
             Shoot();

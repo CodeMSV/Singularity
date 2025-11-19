@@ -1,22 +1,28 @@
 using UnityEngine;
 
-/// <summary>
-/// Controla el comportamiento de los proyectiles disparados por el jugador.
-/// Gestiona daño a enemigos y autodestrucción.
-/// </summary>
 public class Bullet : MonoBehaviour
 {
-    #region Serialized Fields
-    [SerializeField, Min(0f)] 
+    [SerializeField, Min(0f)]
     private float damage = 1f;
-    #endregion
 
-    #region Unity Callbacks
     private void OnTriggerEnter(Collider other)
     {
         if (TryDamageEnemy(other))
         {
             DestroyBullet();
+            return;
+        }
+
+        if (other.CompareTag("Obstacle") || other.CompareTag("Wall") || other.gameObject.layer == LayerMask.NameToLayer("Default"))
+        {
+            if (!other.CompareTag("Player") && !other.CompareTag("Bullet") && !other.isTrigger)
+            {
+                DestroyBullet();
+            }
+            else if (!other.isTrigger)
+            {
+                DestroyBullet();
+            }
         }
     }
 
@@ -24,19 +30,15 @@ public class Bullet : MonoBehaviour
     {
         DestroyBullet();
     }
-    #endregion
 
-    #region Private Methods
     private bool TryDamageEnemy(Collider collider)
     {
         Enemy enemy = collider.GetComponent<Enemy>();
-        
         if (enemy != null)
         {
             enemy.TakeDamage(damage);
             return true;
         }
-        
         return false;
     }
 
@@ -44,5 +46,4 @@ public class Bullet : MonoBehaviour
     {
         Destroy(gameObject);
     }
-    #endregion
 }
