@@ -8,7 +8,9 @@
 
 **Descargar Windows:** [Singularity app](https://drive.google.com/file/d/1oBBlOGJzcBpP_fRnnYBu77KgCx9DC9UV/view?usp=sharing)
 
+
 **Descargar macOS:** [Singularity app](https://drive.google.com/drive/folders/1jQ4HmwRmKR56vPmqj3M0MRoGNU-zrqZS?usp=sharing)
+
 ---
 
 ## 1. Pipeline de Inicialización y Gestión de Memoria (Startup & Loading)
