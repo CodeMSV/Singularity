@@ -6,7 +6,9 @@
 
 **Patrones de Diseño:** Object Pooling Implícito, Pre-Warming, State Machines, Dependency Injection (Manual).
 
-**Descargar:** [Singularity app](https://drive.google.com/file/d/1oBBlOGJzcBpP_fRnnYBu77KgCx9DC9UV/view?usp=sharing)
+**Descargar Windows:** [Singularity app](https://drive.google.com/file/d/1oBBlOGJzcBpP_fRnnYBu77KgCx9DC9UV/view?usp=sharing)
+
+**Descargar macOS:** [Singularity app](https://drive.google.com/drive/folders/1jQ4HmwRmKR56vPmqj3M0MRoGNU-zrqZS?usp=sharing)
 ---
 
 ## 1. Pipeline de Inicialización y Gestión de Memoria (Startup & Loading)
@@ -178,3 +180,108 @@ El proyecto incluye herramientas específicas para diagnóstico en desarrollo y 
 El siguiente video ilustra las mecánicas descritas anteriormente: el sistema de Dash con invencibilidad, la habilidad Nova, el comportamiento de enjambre de la IA y la generación dinámica de obstáculos.
 
 **[ [Singularity](https://www.youtube.com/watch?v=a9vfFvUDq2U) ]**
+
+---
+
+
+# LICENCIA DE USO NO COMERCIAL - SINGULARITY
+
+**Versión 1.0 - Noviembre 2025**
+
+---
+
+## TÉRMINOS Y CONDICIONES DE USO
+
+Copyright © 2025. Todos los derechos reservados.
+
+### 1. CONCESIÓN DE LICENCIA
+
+Se concede permiso para descargar, instalar y ejecutar el videojuego "Singularity" (en adelante, "el Software") en plataformas Windows y macOS únicamente para uso personal y no comercial, sujeto a las restricciones establecidas en esta licencia.
+
+### 2. USOS PERMITIDOS
+
+Bajo esta licencia, se permite:
+
+- **Descargar** el Software desde los enlaces oficiales proporcionados
+- **Instalar** el Software en dispositivos personales
+- **Jugar** y disfrutar del Software de manera individual
+- **Compartir** enlaces oficiales de descarga con terceros
+
+### 3. RESTRICCIONES Y USOS PROHIBIDOS
+
+Queda **EXPRESAMENTE PROHIBIDO**:
+
+- ❌ **Comercializar** el Software de cualquier forma, incluyendo pero no limitado a: venta, alquiler, licenciamiento o distribución por la cual se obtenga beneficio económico
+- ❌ **Copiar, reproducir o duplicar** el Software o cualquiera de sus componentes
+- ❌ **Modificar, alterar o crear obras derivadas** basadas en el Software
+- ❌ **Descompilar, realizar ingeniería inversa o desensamblar** el código fuente del Software
+- ❌ **Distribuir copias** del Software por canales no autorizados
+- ❌ **Extraer, separar o aislar** assets, recursos gráficos, sonoros o de código del Software
+- ❌ **Utilizar el Software** en contextos comerciales, eventos de pago o con fines publicitarios sin autorización explícita por escrito
+- ❌ **Remover, alterar u ocultar** avisos de copyright, marcas registradas o atribuciones del Software
+
+### 4. PROPIEDAD INTELECTUAL
+
+Todos los derechos de propiedad intelectual sobre el Software, incluyendo pero no limitado a: código fuente, arquitectura de software, assets visuales, audio, diseño de niveles, mecánicas de juego y documentación técnica, son y permanecerán como propiedad exclusiva del titular de derechos.
+
+### 5. DISTRIBUCIÓN
+
+El Software solo puede ser distribuido mediante:
+- Enlaces oficiales a las descargas autorizadas
+- Google Drive: Windows ([link oficial](https://drive.google.com/file/d/1oBBlOGJzcBpP_fRnnYBu77KgCx9DC9UV/view?usp=sharing))
+- Google Drive: macOS ([link oficial](https://drive.google.com/drive/folders/1jQ4HmwRmKR56vPmqj3M0MRoGNU-zrqZS?usp=sharing))
+
+Cualquier otra forma de distribución requiere autorización previa y por escrito.
+
+### 6. AUSENCIA DE GARANTÍAS
+
+EL SOFTWARE SE PROPORCIONA "TAL CUAL" ("AS IS"), SIN GARANTÍAS DE NINGÚN TIPO, EXPRESAS O IMPLÍCITAS, INCLUYENDO PERO NO LIMITADO A GARANTÍAS DE COMERCIABILIDAD, IDONEIDAD PARA UN PROPÓSITO PARTICULAR Y NO INFRACCIÓN.
+
+El titular de derechos no garantiza que:
+- El Software esté libre de errores o funcione ininterrumpidamente
+- Los defectos serán corregidos
+- El Software sea compatible con todo hardware o configuración
+
+### 7. LIMITACIÓN DE RESPONSABILIDAD
+
+EN NINGÚN CASO EL TITULAR DE DERECHOS SERÁ RESPONSABLE DE:
+- Daños directos, indirectos, incidentales, especiales o consecuentes
+- Pérdida de datos, beneficios o uso
+- Interrupciones del negocio
+- Cualquier daño derivado del uso o imposibilidad de uso del Software
+
+### 8. TERMINACIÓN DE LA LICENCIA
+
+Esta licencia es efectiva hasta su terminación. Se terminará automáticamente sin previo aviso si:
+- Se incumple cualquier término de esta licencia
+- Se utiliza el Software de manera no autorizada
+
+Tras la terminación, deberá:
+- Cesar inmediatamente todo uso del Software
+- Eliminar todas las copias del Software en su posesión
+
+### 9. LEGISLACIÓN APLICABLE
+
+Esta licencia se regirá e interpretará de acuerdo con las leyes aplicables en la jurisdicción del titular de derechos, sin considerar conflictos de disposiciones legales.
+
+### 10. MODIFICACIONES
+
+El titular de derechos se reserva el derecho de modificar estos términos en cualquier momento. El uso continuado del Software tras dichas modificaciones constituye la aceptación de los nuevos términos.
+
+### 11. ACUERDO COMPLETO
+
+Esta licencia constituye el acuerdo completo entre las partes con respecto al uso del Software y reemplaza todos los acuerdos previos, escritos u orales.
+
+---
+
+## ACEPTACIÓN DE TÉRMINOS
+
+Al descargar, instalar o utilizar Singularity, usted reconoce haber leído, comprendido y aceptado estar obligado por los términos y condiciones de esta licencia.
+
+Si no está de acuerdo con estos términos, no está autorizado a usar el Software.
+
+---
+
+**Para consultas sobre licenciamiento comercial o permisos especiales, contacte al titular de derechos.**
+
+*Singularity - Desarrollado con Unity 6+ | Motor Gráfico y Sistema de Física Avanzado*
