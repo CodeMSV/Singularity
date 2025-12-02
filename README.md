@@ -11,6 +11,9 @@
 
 **Descargar macOS:** [Singularity app](https://drive.google.com/drive/folders/1jQ4HmwRmKR56vPmqj3M0MRoGNU-zrqZS?usp=sharing)
 
+**Formulario sobre el juego:**
+[Formulario](https://docs.google.com/forms/d/1Vp4Kn7vL2Emy-B0_B0YSLfb5JW-facvg1alzl9lH3Mc/edit?usp=drive_web&ouid=107477045156746065283)
+
 ---
 
 ## 1. Pipeline de Inicialización y Gestión de Memoria (Startup & Loading)
